@@ -336,18 +336,117 @@ safety.crisis  — 危机中断（如触发）
 
 ## 6. React 前端 + SSE 消费端 + 核心组件
 
-### 6.1 前端技术栈
+### 6.1 设计风格: Apple 极简主义
+
+整体风格遵循 Apple 设计语言——纯白基底、毛玻璃透明层、极简阴影、SF 风格字体排印。
+
+#### 设计原则
+
+| 原则 | 说明 | 体现 |
+|------|------|------|
+| **留白呼吸** | 大量留白，内容稀疏排布 | 卡片间距 ≥ 16px，页边距 ≥ 20px |
+| **毛玻璃层次** | `backdrop-blur` + 半透明背景分离信息层级 | 导航栏、卡片、浮层均使用毛玻璃 |
+| **微妙的深度** | 极淡阴影 + 极细描边，不用强对比 | `shadow-sm` + `border-white/20` |
+| **柔软圆角** | 大圆角减少视觉攻击性 | 卡片 `rounded-2xl`，按钮 `rounded-full` |
+| **SF 风格字体** | 系统字体栈，优先 SF Pro / PingFang SC | `font-sans` 系统栈，字重变化表达层级 |
+| **克制动效** | 柔和过渡，不突兀 | `duration-500` + `ease-out`，骨架闪光用 CSS animation |
+
+#### 色彩体系
+
+```
+基色:
+  bg-primary:      #fafaf9 (stone-50)   — 页面底色
+  bg-card:         rgba(255,255,255,0.72) — 卡片毛玻璃
+  bg-nav:          rgba(250,250,249,0.72) — 导航毛玻璃
+
+文字:
+  text-primary:    #292524 (stone-800)   — 标题/正文
+  text-secondary:  #78716c (stone-500)   — 辅助说明
+  text-tertiary:   #a8a29e (stone-400)   — 占位/禁用
+
+强调:
+  accent:          #78716c (warm stone)  — 按钮/选中态
+  accent-soft:     rgba(120,113,108,0.08)— 选中态背景
+
+描边:
+  border-card:     rgba(255,255,255,0.6) — 卡片边缘
+  border-subtle:   rgba(0,0,0,0.04)     — 分割线
+```
+
+#### 毛玻璃 CSS 模式
+
+```css
+/* 标准毛玻璃卡片 */
+.glass-card {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.04);
+}
+
+/* 导航栏毛玻璃 */
+.glass-nav {
+  background: rgba(250, 250, 249, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+/* 浮层/模态框 */
+.glass-modal {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(40px) saturate(200%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.12);
+}
+```
+
+#### Tailwind 配置扩展
+
+```typescript
+// tailwind.config.ts
+export default {
+  theme: {
+    extend: {
+      backdropBlur: {
+        glass: '20px',
+        'glass-heavy': '40px',
+      },
+      backgroundColor: {
+        glass: 'rgba(255, 255, 255, 0.72)',
+        'glass-nav': 'rgba(250, 250, 249, 0.72)',
+        'glass-strong': 'rgba(255, 255, 255, 0.85)',
+      },
+      borderColor: {
+        glass: 'rgba(255, 255, 255, 0.6)',
+        subtle: 'rgba(0, 0, 0, 0.04)',
+      },
+      boxShadow: {
+        glass: '0 1px 3px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.04)',
+        'glass-lg': '0 25px 50px -12px rgba(0,0,0,0.12)',
+      },
+      fontFamily: {
+        sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Display"', '"PingFang SC"', '"Helvetica Neue"', 'sans-serif'],
+      },
+    },
+  },
+};
+```
+
+### 6.2 前端技术栈
 
 | 层 | 选择 |
 |---|------|
 | 框架 | React 18+ |
 | 语言 | TypeScript (strict) |
 | 构建 | Vite |
-| 样式 | Tailwind CSS |
+| 样式 | Tailwind CSS + 自定义 glass plugin |
+| 动画 | Framer Motion (卡片过渡、打字机效果) |
 | 状态管理 | Zustand (3 个 store: session, generation, ui) |
 | SSE 客户端 | 原生 EventSource + 自定义重连封装 |
 
-### 6.2 MVP 路由
+### 6.3 MVP 路由
 
 ```
 /           → LandingPage
@@ -356,25 +455,141 @@ safety.crisis  — 危机中断（如触发）
 *            → NotFoundPage
 ```
 
-### 6.3 组件树 (`/guest`)
+### 6.4 组件树 (`/guest`)
 
 ```
 GuestChatPage
-├── ChatBody
-│   ├── EmotionConfirmation      # 情绪确认微交互
-│   ├── FragranceCard[]          # 骨架→完整 过渡
-│   │   ├── ScoreBar
-│   │   ├── NotesCombination
-│   │   └── ActionBar            # complete 阶段可交互
-│   └── ThinkingIndicator        # 生成中动画
-├── ChatInput
-│   ├── EmotionCardPicker        # 8 选 最多 2 张
-│   ├── SceneTagChips            # 6 场景 单选
-│   └── SendButton
-└── NetworkStatusBar             # 断连/重连提示
+├── GlassNavHeader               # 毛玻璃顶栏
+│   ├── PageTitle ("你的免费体验 🌿")
+│   └── SSEStatusIndicator       # 连接状态圆点
+│
+├── ChatBody                     # 可滚动对话区（浅色渐变底）
+│   ├── EmotionConfirmation      # 毛玻璃情绪确认浮层
+│   │   ├── EmotionChip[]         # 柔和圆角胶囊
+│   │   └── CorrectButton         # 「不对 ✏️」文字链接
+│   ├── FragranceCard[]           # 骨架→完整 过渡
+│   │   ├── ScoreBar              # 细线进度条
+│   │   ├── NotesCombination      # 三层香调标签
+│   │   ├── StoryCopy             # 文案（打字机流式）
+│   │   └── ActionBar             # complete 阶段可交互
+│   └── ThinkingIndicator         # 柔光呼吸动画
+│
+├── GlassInputBar                 # 毛玻璃底部输入区
+│   ├── EmotionCardPicker         # 8 张卡片，毛玻璃选中态
+│   ├── SceneTagChips            # 6 场景，胶囊标签
+│   └── SendButton               # 圆形图标按钮，毛玻璃
+│
+└── NetworkStatusBar              # 顶部细条提示
 ```
 
-### 6.4 前端状态分层 (Zustand)
+### 6.5 关键组件设计规格
+
+#### LandingPage
+
+```
+全屏垂直居中布局，柔和渐变背景（stone-50 → warm-100）
+
+HeroSection:
+  - 大型标题: "用香氛，读懂你的情绪" (text-5xl, font-light, tracking-tight)
+  - 副标题: 浅色文字 (text-stone-500, 最大宽度 480px)
+  - 情绪卡片旋转展示: 8 张卡片 3D 缓慢旋转 (Framer Motion)
+  - CTA 按钮: glass-card 样式，"✨ 免费体验" (rounded-full, px-8, py-3)
+
+HowItWorksSection:
+  - 3 步卡片，每步: glass-card + 图标 + 标题 + 描述
+  - 水平排列，间距 24px
+```
+
+#### GuestChatPage
+
+```
+ChatBody 背景:
+  - 微妙的径向渐变: stone-50 中心 → 边缘微暖色调
+  - 可选: 极淡的几何纹理 (SVG pattern, opacity 0.03)
+
+GlassNavHeader:
+  - 固定在顶部 (sticky top-0, z-10)
+  - glass-nav 样式
+  - 左侧: 页面标题（font-medium, text-stone-600）
+  - 右侧: SSE 状态圆点 (green=active, amber=retrying, red=disconnected)
+
+GlassInputBar:
+  - 固定在底部 (sticky bottom-0, z-10)
+  - glass-card + backdrop-blur-glass
+  - 内边距: py-4 px-5
+  - EmotionCardPicker + SceneTagChips + SendButton 水平排列
+```
+
+#### EmotionCardPicker
+
+```
+8 张卡片网格 (2 行 × 4 列)
+
+单张 EmotionCard:
+  - 默认: glass-card, rounded-2xl, 80×96px
+  - 选中: bg-stone-100/80, border-stone-300, scale: 1.03
+  - emoji 顶部 (text-2xl)
+  - 标签文字底部 (text-xs, text-stone-500)
+  - 超限提示: 选第 3 张时，卡片轻微抖动 (Framer Motion)
+```
+
+#### FragranceCard
+
+```
+FragranceCardSkeleton (gen.skeleton 到达前):
+  - glass-card 骨架，内部 3 条闪光条 (CSS shimmer animation)
+  - shimmer: 从左到右的白色渐变扫过
+
+FragranceCard (gen.skeleton 到达后):
+  - glass-card, rounded-2xl, p-5, mb-4
+  - 入场动画: Framer Motion fade-in + slide-up (duration 0.5, ease-out)
+
+  卡片内部:
+  ┌─────────────────────────────────────┐
+  │  Rank Badge · MatchScore            │
+  │  ─────────────────────────────────  │
+  │  名称: "晨雾花园" (text-lg, semibold)│
+  │  品牌: "Brand" (text-xs, stone-400)  │
+  │                                      │
+  │  NotesCombination:                    │
+  │   [前调] 柑橘 佛手柑                   │
+  │   [中调] 白花 茉莉                     │
+  │   [后调] 木质 麝香                     │
+  │                                      │
+  │  StoryCopy (text-sm, stone-600):      │
+  │   "像清晨的第一缕阳光——" ▍             │
+  │                                      │
+  │  ActionBar (gen.complete 后):          │
+  │   [❤️]  [📤]  [🔀]                     │
+  └─────────────────────────────────────┘
+
+ScoreBar:
+  - 极简单行: "87% 匹配" + 细线进度条 (h-1, rounded-full, bg-stone-200)
+  - 进度填充 bg-stone-500
+
+NotesCombination:
+  - 三层标签行，每层: 层级名 (text-xs, stone-500) + 成分标签
+  - 成分标签: glass-chip (bg-stone-100/60, rounded-full, px-2 py-0.5)
+
+ActionBar:
+  - 三个图标按钮，glass-chip 样式
+  - hover: bg-stone-100, transition
+  - disabled (gen.complete 前): opacity-50, cursor-not-allowed
+```
+
+#### 对话气泡
+
+```
+UserMessage:
+  - 右对齐，bg-stone-100, rounded-2xl rounded-br-sm
+  - 轻量玻璃效果 (bg-white/80)
+
+AgentMessage:
+  - 左对齐，无背景，直接内含 FragranceCard
+  - 纯文本回复: text-stone-700, leading-relaxed
+```
+
+### 6.6 前端状态分层 (Zustand)
 
 ```
 Global State
@@ -383,22 +598,22 @@ Global State
 └── uiStore: {loading, modal}
 ```
 
-### 6.5 SSE 客户端
+### 6.7 SSE 客户端
 
 - 事件分发: `chat.*` → sessionStore / `gen.*` → generationStore / `safety.*` → interrupt
 - 重连: 指数退避 [1s, 2s, 4s, 4s, 4s]，最多 5 次
 - 心跳: 30s 无消息 → 主动断连
 - 断点续传: MVP 不实现（Phase 2 `generation_id + phase` 协议）
 
-### 6.6 FragranceCard 渲染阶段
+### 6.8 FragranceCard 渲染阶段
 
 | SSE 事件 | phase 状态 | UI 表现 |
 |---------|:---:|------|
-| `gen.skeleton` 到达前 | — | FragranceCardSkeleton 闪光占位 |
-| `gen.skeleton` 到达 | `skeleton` → `detail` | 香调组合 + 匹配度可见 |
-| `gen.detail` 到达 | `detail` | 补充详情字段 |
-| `gen.copy` 到达 | `copy` | 文案逐 chunk 打字机追加 |
-| `gen.complete` 到达 | `complete` | ActionBar 可交互 |
+| `gen.skeleton` 到达前 | — | glass-card 骨架 + shimmer 闪光 |
+| `gen.skeleton` 到达 | `skeleton` → `detail` | 香调组合 + 匹配度可见，fade-in 入场 |
+| `gen.detail` 到达 | `detail` | 补充详情字段滑入 |
+| `gen.copy` 到达 | `copy` | 文案逐 chunk 打字机追加 + 光标 ▍ |
+| `gen.complete` 到达 | `complete` | ActionBar fade-in，卡片完整交互 |
 
 ---
 
