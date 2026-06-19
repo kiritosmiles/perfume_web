@@ -21,6 +21,9 @@ DIMENSIONS = ["joy", "sadness", "anxiety", "calm", "excitement", "nostalgia", "r
 
 def resolve_emotion_from_cards(input_data: GuestSessionInput) -> dict:
     card_ids = input_data.emotion_card_ids
+    if not card_ids:
+        # Fallback to calm when no cards provided
+        card_ids = ["calm"]
     vectors = [CARD_VECTORS[cid] for cid in card_ids]
 
     # Average vectors if multiple cards
