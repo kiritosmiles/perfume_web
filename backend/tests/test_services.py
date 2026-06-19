@@ -28,9 +28,9 @@ class TestEmotionService:
         assert result["confidence"] > 0
 
     def test_unknown_card_id_raises_gracefully(self):
-        inp = GuestSessionInput(emotion_card_ids=["nonexistent"])
-        with pytest.raises(KeyError):
-            resolve_emotion_from_cards(inp)
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError, match="Invalid card id"):
+            GuestSessionInput(emotion_card_ids=["nonexistent"])
 
 
 class TestSafetyService:

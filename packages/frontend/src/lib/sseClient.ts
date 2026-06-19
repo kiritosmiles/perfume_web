@@ -68,6 +68,7 @@ export function createSSEConnection(
     };
 
     es.onerror = () => {
+      if (heartbeatTimer) clearTimeout(heartbeatTimer);
       onStatus("disconnected");
       es?.close();
       maybeReconnect();

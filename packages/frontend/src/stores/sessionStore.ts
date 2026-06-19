@@ -4,7 +4,7 @@ interface EmotionState {
   emotion_vector: Record<string, number> | null;
   primary_emotion: string | null;
   confidence: number | null;
-  source: "card_preset" | null;
+  source: "card_preset" | "bert" | "llm_fallback" | null;
 }
 
 interface SessionState {
@@ -40,7 +40,7 @@ export const useSessionStore = create<SessionState>((set) => ({
         emotion_vector: emotion.emotion_vector,
         primary_emotion: emotion.primary_emotion,
         confidence: emotion.confidence,
-        source: emotion.source as "card_preset",
+        source: emotion.source as EmotionState["source"],
       },
     }),
 
