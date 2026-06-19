@@ -1,0 +1,5 @@
+{
+  "name": "perfume-web",
+  "private": true,
+  "workspaces": ["packages/shared", "packages/frontend"]
+}
