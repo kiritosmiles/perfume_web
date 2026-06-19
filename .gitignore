@@ -1,2 +1,8 @@
 # Worktree isolation directory
 .worktrees/
+
+# Environment variables
+.env
+
+# Node dependencies
+node_modules/
