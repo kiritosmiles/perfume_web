@@ -1,2 +1,11 @@
 # Worktree isolation directory
 .worktrees/
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# IDE
+.idea/
