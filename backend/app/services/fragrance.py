@@ -7,28 +7,30 @@ async def search_fragrance_by_emotion(
     scene_tag: str | None = None,
     limit: int = 10,
 ) -> list[dict]:
-    # Build the matching query: 1-hop Emotion -> SOOTHES -> Accord <- HAS_ACCORD - Perfume
-    # Score formula weights each emotion by its vector value so the primary emotion
-    # dominates (e.g. romance=0.9 gets 1.5× the weight of joy=0.6)
+    # Multi-accord aggregation query: instead of taking MAX (which loses
+    # differentiation when many perfumes share the same top accord at score 100),
+    # SUM all emotion→accord→perfume path scores. A perfume matching citrus(0.81)
+    # + fruity(0.64) + floral(0.49) = 1.94 beats one matching only citrus(0.81).
+    # Rating is added as a small tiebreaker (max 2.5 points for rating=5).
     query = """
         UNWIND $emotions AS ed
         MATCH (e:Emotion {name: ed.name})-[r:SOOTHES]->(a:Accord)<-[ha:HAS_ACCORD]-(p:Perfume)
-        WITH p, a, r, ha, ed,
-             (ed.weight * r.weight * ha.score / 100.0
-              + COALESCE(toFloat(p.rating), 0) * 0.1) AS score
-        ORDER BY score DESC
-        WITH p, MAX(score) AS max_score, HEAD(COLLECT(a.name)) AS best_accord,
-             HEAD(COLLECT(ha.score)) AS best_accord_score,
-             HEAD(COLLECT(r.weight)) AS best_weight
+        WITH p, a, ed, r, ha,
+             (ed.weight * r.weight * ha.score / 100.0) AS path_score
+        WITH p,
+             SUM(path_score) AS total_accord_score,
+             COLLECT(DISTINCT a.name) AS matched_accords
         OPTIONAL MATCH (p)-[:BY]->(b:Brand)
+        WITH p, b, total_accord_score, matched_accords,
+             total_accord_score + COALESCE(toFloat(p.rating), 3.0) * 0.5 AS score
+        WHERE total_accord_score > 0
         RETURN DISTINCT p.name AS name,
                b.name AS brand,
                p.rating AS rating,
-               best_accord AS accord,
-               best_accord_score AS accord_score,
-               best_weight AS relation_weight,
-               max_score AS score
-        ORDER BY max_score DESC
+               matched_accords[0] AS accord,
+               total_accord_score AS accord_score,
+               score
+        ORDER BY score DESC
         LIMIT $limit
     """
 

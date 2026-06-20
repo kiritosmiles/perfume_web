@@ -51,9 +51,22 @@ STORY_TEMPLATES: dict[str, list[str]] = {
 
 
 def build_skeleton(candidates: list[dict], emotion_vector: dict[str, float]) -> list[dict]:
+    # Normalize scores: Cypher returns raw weighted scores (max ~1.3).
+    # Scale relative to the top result so the best match anchors at ~90-95
+    # and trailing results show real differentiation.
+    if not candidates:
+        return []
+
+    raw_scores = [c.get("score", 0) for c in candidates[:3]]
+    top_raw = max(raw_scores) if raw_scores else 1.0
+
     skeletons = []
     for i, c in enumerate(candidates[:3]):
-        score = min(int(c.get("score", 0) * 100), 95)
+        raw = c.get("score", 0)
+        # Normalize: 85–95 range anchored on the top result
+        normalized = 85 + int((raw / top_raw) * 10) if top_raw > 0 else 85
+        score = min(normalized, 95)
+
         name = c.get("name", "Unknown")
         notes = _estimate_notes(name, emotion_vector)
 
