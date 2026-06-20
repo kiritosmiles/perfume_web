@@ -1,5 +1,6 @@
-# Worktree isolation directory
+# Worktree isolation directories
 .worktrees/
+.claude/worktrees/
 
 # Dependencies
 node_modules/
