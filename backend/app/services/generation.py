@@ -103,7 +103,7 @@ def build_copy_stream(rank: int, generation_id: str, primary_emotion: str) -> li
     templates = STORY_TEMPLATES.get(
         _emotion_label_to_key(primary_emotion), STORY_TEMPLATES["calm"]
     )
-    return [f"[{generation_id}] {line}" for line in templates]
+    return list(templates)
 
 
 def _emotion_label_to_key(label: str) -> str:

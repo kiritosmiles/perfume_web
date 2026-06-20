@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import uuid
 from typing import AsyncGenerator
@@ -6,6 +7,7 @@ from typing import AsyncGenerator
 from neo4j.exceptions import Neo4jError, ServiceUnavailable, SessionExpired
 
 from app.core.deps import get_db_neo4j
+from app.core.pg import get_pg_pool
 from app.models.guest import GuestSessionInput
 from app.services.emotion import resolve_emotion_from_cards
 from app.services.fragrance import search_fragrance_by_emotion
@@ -13,6 +15,65 @@ from app.services.generation import build_skeleton, build_copy_stream
 from app.sse.protocol import sse, now_iso
 
 logger = logging.getLogger(__name__)
+
+
+async def _log_guest_user_message(
+    browser_id: str,
+    generation_id: str,
+    emotion_result: dict,
+) -> None:
+    """Persist the user's card pick to temp_conversations for Phase 2 migration."""
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO temp_conversations
+                    (browser_id, round, role, content, emotion_tags, created_at)
+                VALUES ($1, 0, 'user', $2, $3, now())
+                """,
+                browser_id,
+                json.dumps({
+                    "primary_emotion": emotion_result["primary_emotion"],
+                    "confidence": emotion_result["confidence"],
+                    "source": emotion_result["source"],
+                }, ensure_ascii=False),
+                json.dumps(emotion_result["emotion_vector"], ensure_ascii=False),
+            )
+    except Exception:
+        logger.warning("Failed to persist user message for %s", browser_id, exc_info=True)
+
+
+async def _log_guest_agent_message(
+    browser_id: str,
+    generation_id: str,
+    skeletons: list[dict],
+    emotion_result: dict,
+) -> None:
+    """Persist the agent's recommendations to temp_conversations."""
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO temp_conversations
+                    (browser_id, round, role, content, emotion_tags, recommendation, created_at)
+                VALUES ($1, 0, 'agent', $2, $3, $4, now())
+                """,
+                browser_id,
+                json.dumps({
+                    "primary_emotion": emotion_result["primary_emotion"],
+                    "recommendations": [
+                        {"rank": s["rank"], "name": s["name"], "brand": s["brand"],
+                         "match_score": s["match_score"]}
+                        for s in skeletons
+                    ],
+                }, ensure_ascii=False),
+                json.dumps(emotion_result["emotion_vector"], ensure_ascii=False),
+                json.dumps(skeletons, ensure_ascii=False),
+            )
+    except Exception:
+        logger.warning("Failed to persist agent message for %s", browser_id, exc_info=True)
 
 
 async def sse_event_stream(
@@ -37,6 +98,10 @@ async def sse_event_stream(
         "confidence": emotion_result["confidence"],
         "source": emotion_result["source"],
     })
+
+    # Persist user message for Phase 2 registration migration
+    if input_data.browser_id:
+        await _log_guest_user_message(input_data.browser_id, generation_id, emotion_result)
 
     await asyncio.sleep(0)
 
@@ -123,6 +188,12 @@ async def sse_event_stream(
                 "is_final": (i == len(copy_chunks) - 1),
             })
             await asyncio.sleep(0)
+
+    # Persist agent response for Phase 2 registration migration
+    if input_data.browser_id:
+        await _log_guest_agent_message(
+            input_data.browser_id, generation_id, skeletons, emotion_result
+        )
 
     # 8) gen.complete
     yield sse("gen.complete", {
