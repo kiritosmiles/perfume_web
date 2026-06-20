@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     NEO4J_PASSWORD: str = "perfume_dev"
 
     # Redis
-    REDIS_URL: str = "redis://localhost:6379"
+    REDIS_URL: str = "redis://:perfume_dev@localhost:6379"
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173"]

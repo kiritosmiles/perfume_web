@@ -49,6 +49,7 @@ async def sse_event_stream(
                 neo4j_session,
                 emotion_result["emotion_vector"],
                 input_data.scene_tag,
+                limit=50,  # Fetch more — top scores dominated by duplicate name variants
             )
     except Exception:
         # If Neo4j unavailable, return gen.error with NO_MATCH

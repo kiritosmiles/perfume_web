@@ -8,31 +8,39 @@ async def search_fragrance_by_emotion(
     limit: int = 10,
 ) -> list[dict]:
     # Build the matching query: 1-hop Emotion -> SOOTHES -> Accord <- HAS_ACCORD - Perfume
+    # Score formula weights each emotion by its vector value so the primary emotion
+    # dominates (e.g. romance=0.9 gets 1.5× the weight of joy=0.6)
     query = """
-        MATCH (e:Emotion)-[r:SOOTHES]->(a:Accord)<-[ha:HAS_ACCORD]-(p:Perfume)
-        OPTIONAL MATCH (p)-[:BY_BRAND]->(b:Brand)
-        WHERE e.id IN $emotion_ids
-        WITH p, a, b, r, ha,
-             (r.weight * ha.score / 100.0 + COALESCE(p.rating, 0) * 0.1) AS score
-        RETURN p.name AS name,
+        UNWIND $emotions AS ed
+        MATCH (e:Emotion {name: ed.name})-[r:SOOTHES]->(a:Accord)<-[ha:HAS_ACCORD]-(p:Perfume)
+        WITH p, a, r, ha, ed,
+             (ed.weight * r.weight * ha.score / 100.0
+              + COALESCE(toFloat(p.rating), 0) * 0.1) AS score
+        ORDER BY score DESC
+        WITH p, MAX(score) AS max_score, HEAD(COLLECT(a.name)) AS best_accord,
+             HEAD(COLLECT(ha.score)) AS best_accord_score,
+             HEAD(COLLECT(r.weight)) AS best_weight
+        OPTIONAL MATCH (p)-[:BY]->(b:Brand)
+        RETURN DISTINCT p.name AS name,
                b.name AS brand,
                p.rating AS rating,
-               a.name AS accord,
-               ha.score AS accord_score,
-               r.weight AS relation_weight,
-               score
-        ORDER BY score DESC
+               best_accord AS accord,
+               best_accord_score AS accord_score,
+               best_weight AS relation_weight,
+               max_score AS score
+        ORDER BY max_score DESC
         LIMIT $limit
     """
 
-    # Map primary emotion to Neo4j emotion node ids
-    # Find the top 2 emotions from the vector
+    # Pass emotion names with their vector weights for weighted scoring
     sorted_emotions = sorted(emotion_vector.items(), key=lambda x: x[1], reverse=True)
-    emotion_ids = [e[0] for e in sorted_emotions[:2] if e[1] > 0.3]
+    emotions_param = [
+        {"name": e[0], "weight": e[1]}
+        for e in sorted_emotions[:2] if e[1] > 0.3
+    ]
+    if not emotions_param:
+        emotions_param = [{"name": sorted_emotions[0][0], "weight": sorted_emotions[0][1]}]
 
-    if not emotion_ids:
-        emotion_ids = [sorted_emotions[0][0]]  # fallback to top emotion
-
-    result = await session.run(query, emotion_ids=emotion_ids, limit=limit)
+    result = await session.run(query, emotions=emotions_param, limit=limit)
     records = await result.data()
     return records
