@@ -116,6 +116,11 @@ export function GuestChatPage() {
               visible={!!emotion.primary_emotion}
               primaryEmotion={emotion.primary_emotion || ""}
               confidence={emotion.confidence || 0}
+              onCorrect={() => {
+                close();
+                setSseUrl(null);
+                setCardIds([]);
+              }}
             />
           </div>
         )}

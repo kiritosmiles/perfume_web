@@ -4,12 +4,14 @@ interface EmotionConfirmationProps {
   visible: boolean;
   primaryEmotion: string;
   confidence: number;
+  onCorrect?: () => void;
 }
 
 export function EmotionConfirmation({
   visible,
   primaryEmotion,
   confidence,
+  onCorrect,
 }: EmotionConfirmationProps) {
   return (
     <AnimatePresence>
@@ -37,6 +39,15 @@ export function EmotionConfirmation({
               {Math.round(confidence * 100)}%
             </span>
           </div>
+          {onCorrect && (
+            <button
+              onClick={onCorrect}
+              className="mt-3 text-xs text-stone-400 hover:text-stone-600
+                         underline underline-offset-2 transition-colors"
+            >
+              Not right? Pick again →
+            </button>
+          )}
         </motion.div>
       )}
     </AnimatePresence>
