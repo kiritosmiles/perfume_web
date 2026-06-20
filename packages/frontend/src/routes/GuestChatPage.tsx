@@ -8,6 +8,7 @@ import { ChatInput } from "../components/chat/ChatInput";
 import { ThinkingIndicator } from "../components/chat/ThinkingIndicator";
 import { FragranceCard } from "../components/fragrance/FragranceCard";
 import { Button } from "../components/ui/Button";
+import { NetworkStatusBar } from "../components/ui/NetworkStatusBar";
 import { useSSE } from "../hooks/useSSE";
 import { useSessionStore } from "../stores/sessionStore";
 import { useGenerationStore } from "../stores/generationStore";
@@ -70,6 +71,9 @@ export function GuestChatPage() {
 
   return (
     <div className="min-h-dvh bg-stone-50 flex flex-col">
+      {/* Network status bar — thin top strip for connection state */}
+      <NetworkStatusBar />
+
       {/* Nav header */}
       <nav className="glass-nav sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">

@@ -180,16 +180,16 @@ async def sse_event_stream(
 
     await asyncio.sleep(0)
 
-    # 6) gen.detail per card
+    # 6) gen.detail per card — dynamic longevity/sillage/season from Neo4j
     for sk in skeletons:
         yield sse("gen.detail", {
             "generation_id": generation_id,
             "rank": sk["rank"],
             "expanded_fields": {
                 "graph_path": f"Emotion→{emotion_result['primary_emotion']}→Accord→{sk['name']}",
-                "longevity": 6,
-                "sillage": 5,
-                "season": "all",
+                "longevity": sk.get("longevity", 3.0),
+                "sillage": sk.get("sillage", 2.5),
+                "season": sk.get("season", "all"),
             },
         })
         await asyncio.sleep(0)

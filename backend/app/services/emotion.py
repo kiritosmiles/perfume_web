@@ -16,6 +16,9 @@ EMOTION_LABELS: dict[str, str] = {
     "excitement": "兴奋", "nostalgia": "怀旧", "romance": "浪漫", "melancholy": "忧郁",
 }
 
+# Reverse mapping: Chinese label → English key
+EMOTION_LABEL_TO_KEY: dict[str, str] = {v: k for k, v in EMOTION_LABELS.items()}
+
 DIMENSIONS = ["joy", "sadness", "anxiety", "calm", "excitement", "nostalgia", "romance", "melancholy"]
 
 

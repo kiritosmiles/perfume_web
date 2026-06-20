@@ -1,3 +1,6 @@
+from app.services.emotion import EMOTION_LABEL_TO_KEY
+
+
 STORY_TEMPLATES: dict[str, list[str]] = {
     "joy": [
         "这款香水如同阳光洒落的瞬间",
@@ -70,6 +73,10 @@ def build_skeleton(candidates: list[dict], emotion_vector: dict[str, float]) -> 
         name = c.get("name", "Unknown")
         notes = _estimate_notes(name, emotion_vector)
 
+        # Extract dynamic properties from Neo4j (or fallback for degraded path)
+        seasons = c.get("seasons") or []
+        season = seasons[0] if seasons else "all"
+
         skeletons.append({
             "rank": i + 1,
             "name": name,
@@ -79,6 +86,9 @@ def build_skeleton(candidates: list[dict], emotion_vector: dict[str, float]) -> 
             "source": "graphrag_match",
             "allergen_warnings": [],
             "is_partial": True,
+            "longevity": round(c.get("longevity") or 3.0, 1),
+            "sillage": round(c.get("sillage") or 2.5, 1),
+            "season": season,
         })
     return skeletons
 
@@ -100,15 +110,6 @@ def _estimate_notes(name: str, emotion_vector: dict[str, float]) -> list[str]:
 
 
 def build_copy_stream(rank: int, generation_id: str, primary_emotion: str) -> list[str]:
-    templates = STORY_TEMPLATES.get(
-        _emotion_label_to_key(primary_emotion), STORY_TEMPLATES["calm"]
-    )
+    emotion_key = EMOTION_LABEL_TO_KEY.get(primary_emotion, "calm")
+    templates = STORY_TEMPLATES.get(emotion_key, STORY_TEMPLATES["calm"])
     return list(templates)
-
-
-def _emotion_label_to_key(label: str) -> str:
-    label_map = {
-        "开心": "joy", "难过": "sadness", "焦虑": "anxiety", "平静": "calm",
-        "兴奋": "excitement", "怀旧": "nostalgia", "浪漫": "romance", "忧郁": "melancholy",
-    }
-    return label_map.get(label, "calm")

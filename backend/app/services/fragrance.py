@@ -21,12 +21,16 @@ async def search_fragrance_by_emotion(
              SUM(path_score) AS total_accord_score,
              COLLECT(DISTINCT a.name) AS matched_accords
         OPTIONAL MATCH (p)-[:BY]->(b:Brand)
-        WITH p, b, total_accord_score, matched_accords,
+        OPTIONAL MATCH (p)-[ss:SUITS_SEASON]->(:Scene)
+        WITH p, b, ss, total_accord_score, matched_accords,
              total_accord_score + COALESCE(toFloat(p.rating), 3.0) * 0.5 AS score
         WHERE total_accord_score > 0
         RETURN DISTINCT p.name AS name,
                b.name AS brand,
                p.rating AS rating,
+               p.longevity AS longevity,
+               p.sillage AS sillage,
+               COLLECT(DISTINCT ss.season) AS seasons,
                matched_accords[0] AS accord,
                total_accord_score AS accord_score,
                score

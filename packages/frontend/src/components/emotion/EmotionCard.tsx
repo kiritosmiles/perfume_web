@@ -6,6 +6,7 @@ interface EmotionCardProps {
   label: string;
   selected: boolean;
   disabled: boolean;
+  shake?: boolean;
   onClick: () => void;
 }
 
@@ -14,13 +15,20 @@ export function EmotionCard({
   label,
   selected,
   disabled,
+  shake,
   onClick,
 }: EmotionCardProps) {
   const isDimmed = !selected && disabled;
 
   return (
     <motion.button
-      whileTap={{ scale: isDimmed ? 1 : 0.95 }}
+      whileTap={isDimmed ? { scale: 1 } : { scale: 0.95 }}
+      animate={
+        shake
+          ? { x: [0, -4, 4, -4, 4, 0] }
+          : {}
+      }
+      transition={shake ? { duration: 0.35 } : {}}
       onClick={onClick}
       disabled={disabled && !selected}
       className={`

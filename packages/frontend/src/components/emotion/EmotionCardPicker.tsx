@@ -1,3 +1,4 @@
+import { useState, useCallback } from "react";
 import { EmotionCard } from "./EmotionCard";
 
 const EMOTION_CARDS = [
@@ -22,9 +23,21 @@ export function EmotionCardPicker({
   onToggle,
   maxSelection = 2,
 }: EmotionCardPickerProps) {
-  const handleToggle = (id: string) => {
-    onToggle(id);
-  };
+  const [shakeKey, setShakeKey] = useState(0);
+
+  const handleToggle = useCallback(
+    (id: string) => {
+      const atMax = selectedIds.length >= maxSelection;
+      const isSelected = selectedIds.includes(id);
+      if (atMax && !isSelected) {
+        // Over-limit: trigger shake animation on cards
+        setShakeKey((k) => k + 1);
+        return;
+      }
+      onToggle(id);
+    },
+    [selectedIds, maxSelection, onToggle],
+  );
 
   const atMax = selectedIds.length >= maxSelection;
 
@@ -45,6 +58,7 @@ export function EmotionCardPicker({
               label={card.label}
               selected={isSelected}
               disabled={isDisabled}
+              shake={shakeKey > 0 && isDisabled}
               onClick={() => handleToggle(card.id)}
             />
           );
