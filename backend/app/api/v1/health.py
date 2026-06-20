@@ -1,25 +1,13 @@
 import asyncio
+import logging
 
 from fastapi import APIRouter
 
 from app.core.config import settings
+from app.graph.client import check_neo4j_health
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
-
-
-async def _check_neo4j() -> bool:
-    try:
-        from neo4j import AsyncGraphDatabase
-        driver = AsyncGraphDatabase.driver(
-            settings.NEO4J_URI,
-            auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
-        )
-        async with driver.session() as session:
-            await session.run("RETURN 1")
-        await driver.close()
-        return True
-    except Exception:
-        return False
 
 
 async def _check_postgres() -> bool:
@@ -32,10 +20,13 @@ async def _check_postgres() -> bool:
             password=settings.DB_PASSWORD,
             database=settings.DB_NAME,
         )
-        await conn.execute("SELECT 1")
-        await conn.close()
+        try:
+            await conn.execute("SELECT 1")
+        finally:
+            await conn.close()
         return True
-    except Exception:
+    except Exception as e:
+        logger.warning("Postgres health check failed: %s", e)
         return False
 
 
@@ -43,17 +34,20 @@ async def _check_redis() -> bool:
     try:
         import redis.asyncio as aioredis
         r = aioredis.from_url(settings.REDIS_URL)
-        await r.ping()
-        await r.aclose()
+        try:
+            await r.ping()
+        finally:
+            await r.aclose()
         return True
-    except Exception:
+    except Exception as e:
+        logger.warning("Redis health check failed: %s", e)
         return False
 
 
 @router.get("/health")
 async def health():
     neo4j_ok, postgres_ok, redis_ok = await asyncio.gather(
-        _check_neo4j(), _check_postgres(), _check_redis(),
+        check_neo4j_health(), _check_postgres(), _check_redis(),
     )
 
     all_ok = neo4j_ok and postgres_ok and redis_ok

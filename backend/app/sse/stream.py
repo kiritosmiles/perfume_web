@@ -1,6 +1,9 @@
 import asyncio
+import logging
 import uuid
 from typing import AsyncGenerator
+
+from neo4j.exceptions import Neo4jError, ServiceUnavailable, SessionExpired
 
 from app.core.deps import get_db_neo4j
 from app.models.guest import GuestSessionInput
@@ -8,6 +11,8 @@ from app.services.emotion import resolve_emotion_from_cards
 from app.services.fragrance import search_fragrance_by_emotion
 from app.services.generation import build_skeleton, build_copy_stream
 from app.sse.protocol import sse, now_iso
+
+logger = logging.getLogger(__name__)
 
 
 async def sse_event_stream(
@@ -51,8 +56,9 @@ async def sse_event_stream(
                 input_data.scene_tag,
                 limit=50,  # Fetch more — top scores dominated by duplicate name variants
             )
-    except Exception:
-        # If Neo4j unavailable, return gen.error with NO_MATCH
+    except (Neo4jError, ServiceUnavailable, SessionExpired, OSError) as e:
+        # Neo4j connectivity issues — graceful degradation
+        logger.warning("GraphRAG search degraded (gen_id=%s): %s", generation_id, e)
         yield sse("gen.error", {
             "generation_id": generation_id,
             "code": "NO_MATCH",

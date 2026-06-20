@@ -18,6 +18,11 @@ httpx = "^0.28.0"
 pytest = "^8.3.0"
 pytest-asyncio = "^0.24.0"
 
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
+# Use function-scoped event loops, but reset the shared Neo4j driver between
+# SSE tests to prevent cross-loop connection corruption (Windows proactor)
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

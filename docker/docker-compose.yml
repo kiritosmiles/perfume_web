@@ -36,6 +36,12 @@ services:
     volumes:
       - neo4jdata:/data
       - ./neo4j/import:/var/lib/neo4j/import
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'RETURN 1;' | cypher-shell -u neo4j -p ${NEO4J_PASSWORD:-perfume_dev} 2>/dev/null || exit 1"]
+      interval: 10s
+      timeout: 15s
+      retries: 5
+      start_period: 30s
 
 volumes:
   pgdata:

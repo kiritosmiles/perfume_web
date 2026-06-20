@@ -6,7 +6,55 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **情绪人格×香水 AI Agent** — A perfume recommendation AI agent web app for C-end users. Uses LLM + GraphRAG + three-layer memory to match user emotions, personality, and context with fragrance formulas.
 
-**Current phase:** Pre-implementation. Documentation and design only. No code has been written.
+**Current phase:** MVP Phase 1 implementation complete. E2E SSE protocol verified.
+
+## Project Structure
+
+```
+perfume_web/
+├── backend/                        # Python FastAPI backend
+│   ├── app/
+│   │   ├── api/v1/
+│   │   │   ├── health.py           # GET /api/v1/health
+│   │   │   ├── guest.py            # POST/GET /api/v1/guest/sessions (SSE)
+│   │   │   └── router.py           # Route aggregation
+│   │   ├── core/
+│   │   │   ├── config.py           # Settings (Pydantic BaseSettings)
+│   │   │   └── deps.py             # Dependency injection (get_db_neo4j)
+│   │   ├── graph/
+│   │   │   └── client.py           # Neo4j AsyncDriver (shared, Lock-guarded)
+│   │   ├── models/
+│   │   │   └── guest.py            # GuestSessionInput (Pydantic, 8-card validation)
+│   │   ├── services/
+│   │   │   ├── emotion.py          # resolve_emotion_from_cards (8-dim vectors)
+│   │   │   ├── fragrance.py        # search_fragrance_by_emotion (GraphRAG 1-hop)
+│   │   │   ├── generation.py       # build_skeleton + build_copy_stream
+│   │   │   └── safety.py           # crisis_check (keyword-based)
+│   │   ├── sse/
+│   │   │   ├── protocol.py         # sse() helper + now_iso()
+│   │   │   └── stream.py           # sse_event_stream (7-event async generator)
+│   │   └── main.py                 # FastAPI app + lifespan + CORS
+│   └── tests/                      # 17 tests (pytest + asyncio)
+├── packages/
+│   ├── shared/                     # Shared TypeScript types (22 SSE events)
+│   │   └── src/
+│   │       ├── index.ts
+│   │       ├── sse/                # Event type definitions
+│   │       └── types/              # Domain types
+│   └── frontend/                   # React + Vite + Tailwind frontend
+│       └── src/
+│           ├── App.tsx             # Router (Landing | GuestChat | Fallback)
+│           ├── components/         # 11 UI components (glass morphism)
+│           ├── hooks/              # useSSE hook (EventSource + reconnect)
+│           ├── routes/             # LandingPage, GuestChatPage, FallbackPage
+│           ├── stores/             # Zustand: sessionStore, generationStore, uiStore
+│           └── lib/                # SSE client (EventSource + heartbeat)
+├── docker/
+│   ├── docker-compose.yml          # PG 15 + Redis 7 + Neo4j 5 (all 127.0.0.1)
+│   └── neo4j/import/               # init-fragrances.cypher
+└── scripts/
+    └── import_fragrantica_to_neo4j.py  # JSON → Cypher converter
+```
 
 ## Document Map
 
@@ -59,3 +107,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - The brainstorming skill should be used before any implementation task.
 - When implementation begins, follow the 4-spec split: PRD defines what to build, TRD defines how, Wireframe defines the UI, Quality defines the bar.
 - Cross-reference between docs using `详见 xxx 文档 §x.x` format.
+
+## Development Commands
+
+```bash
+# Infrastructure
+docker compose -f docker/docker-compose.yml up -d
+docker compose -f docker/docker-compose.yml down -v     # Full reset (clears DB)
+
+# Backend (:8000)
+cd backend && python -m uvicorn app.main:app --reload --port 8000
+cd backend && python -m pytest tests/ -v               # 17 tests
+
+# Frontend (:5173)
+cd packages/frontend && npx vite
+cd packages/frontend && npx tsc --noEmit               # Type check
+
+# Neo4j direct access
+docker exec docker-neo4j-1 cypher-shell -u neo4j -p perfume_dev "MATCH (n) RETURN labels(n)[0] AS label, count(n) AS cnt"
+```
