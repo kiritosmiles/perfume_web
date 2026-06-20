@@ -57,6 +57,17 @@ class TestSafetyService:
         # "不想活" is not in high_risk set
         assert result["severity"] == "medium"
 
+    def test_crisis_includes_hotlines(self):
+        result = crisis_check("我想自杀")
+        assert result["is_crisis"] is True
+        assert len(result["hotlines"]) >= 3
+        assert all("name" in h and "phone" in h for h in result["hotlines"])
+
+    def test_normal_text_has_empty_hotlines(self):
+        result = crisis_check("今天天气真好")
+        assert result["is_crisis"] is False
+        assert result["hotlines"] == []
+
 
 class TestGenerationService:
     @pytest.fixture

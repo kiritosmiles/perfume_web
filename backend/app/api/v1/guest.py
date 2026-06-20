@@ -1,34 +1,51 @@
+import logging
+
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 
 from app.core.pg import get_pg_pool
+from app.core.redis import check_redis_quota
 from app.models.guest import GuestSessionInput
 from app.sse.protocol import sse
 from app.sse.stream import sse_event_stream
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 async def _check_guest_quota(browser_id: str) -> bool:
-    """Return True if quota is available (and mark as used), False if exhausted."""
-    pool = await get_pg_pool()
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT used FROM guest_quota WHERE browser_id = $1",
-            browser_id,
-        )
-        if row is not None and row["used"]:
-            return False  # Already used their free session
-        if row is None:
-            await conn.execute(
-                "INSERT INTO guest_quota (browser_id, used) VALUES ($1, true)",
+    """Two-layer quota: Redis (fast, 30d TTL) + PG (durable).
+
+    Returns True if quota is available (and marks as used), False if exhausted.
+    """
+    # Layer 1: Redis fast-path (no DB roundtrip for repeat visitors)
+    if not await check_redis_quota(browser_id):
+        return False
+
+    # Layer 2: PG durable record
+    try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT used FROM guest_quota WHERE browser_id = $1",
                 browser_id,
             )
-        else:
-            await conn.execute(
-                "UPDATE guest_quota SET used = true WHERE browser_id = $1",
-                browser_id,
-            )
+            if row is not None and row["used"]:
+                return False  # Already used their free session
+            if row is None:
+                await conn.execute(
+                    "INSERT INTO guest_quota (browser_id, used) VALUES ($1, true)",
+                    browser_id,
+                )
+            else:
+                await conn.execute(
+                    "UPDATE guest_quota SET used = true WHERE browser_id = $1",
+                    browser_id,
+                )
+            return True
+    except Exception:
+        # PG unreachable → allow (trust Redis layer)
+        logger.warning("PG quota check failed for %s, trusting Redis", browser_id)
         return True
 
 

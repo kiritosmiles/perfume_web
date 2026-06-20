@@ -7,13 +7,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.router import router
 from app.core.config import settings
 from app.core.pg import init_pg_pool, close_pg_pool
+from app.core.redis import init_redis, close_redis
 from app.graph.client import close_neo4j
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await init_pg_pool()
+    await init_redis()
     yield
+    await close_redis()
     await close_pg_pool()
     await close_neo4j()
 

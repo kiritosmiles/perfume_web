@@ -3,7 +3,8 @@ import logging
 
 from fastapi import APIRouter
 
-from app.core.config import settings
+from app.core.pg import get_pg_pool
+from app.core.redis import check_redis_health
 from app.graph.client import check_neo4j_health
 
 logger = logging.getLogger(__name__)
@@ -11,43 +12,21 @@ router = APIRouter()
 
 
 async def _check_postgres() -> bool:
+    """Health check using the shared PG pool (no per-request connection)."""
     try:
-        import asyncpg
-        conn = await asyncpg.connect(
-            host=settings.DB_HOST,
-            port=settings.DB_PORT,
-            user=settings.DB_USER,
-            password=settings.DB_PASSWORD,
-            database=settings.DB_NAME,
-        )
-        try:
+        pool = await get_pg_pool()
+        async with pool.acquire() as conn:
             await conn.execute("SELECT 1")
-        finally:
-            await conn.close()
         return True
     except Exception as e:
         logger.warning("Postgres health check failed: %s", e)
         return False
 
 
-async def _check_redis() -> bool:
-    try:
-        import redis.asyncio as aioredis
-        r = aioredis.from_url(settings.REDIS_URL)
-        try:
-            await r.ping()
-        finally:
-            await r.aclose()
-        return True
-    except Exception as e:
-        logger.warning("Redis health check failed: %s", e)
-        return False
-
-
 @router.get("/health")
 async def health():
     neo4j_ok, postgres_ok, redis_ok = await asyncio.gather(
-        check_neo4j_health(), _check_postgres(), _check_redis(),
+        check_neo4j_health(), _check_postgres(), check_redis_health(),
     )
 
     all_ok = neo4j_ok and postgres_ok and redis_ok
