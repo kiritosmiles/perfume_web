@@ -29,6 +29,9 @@ async def close_pg_pool() -> None:
 
 
 async def get_pg_pool() -> asyncpg.Pool:
-    """Return the shared pool. Must be called after init_pg_pool()."""
-    assert _pool is not None, "PG pool not initialized — call init_pg_pool() at startup"
+    """Return the shared pool, lazily initializing on first call if needed."""
+    global _pool
+    if _pool is None:
+        await init_pg_pool()
+    assert _pool is not None, "PG pool initialization failed"
     return _pool
