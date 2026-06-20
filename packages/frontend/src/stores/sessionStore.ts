@@ -4,7 +4,7 @@ interface EmotionState {
   emotion_vector: Record<string, number> | null;
   primary_emotion: string | null;
   confidence: number | null;
-  source: "card_preset" | "bert" | "llm_fallback" | null;
+  source: "card_preset" | "bert" | "llm_fallback" | "llm_text" | null;
 }
 
 interface SessionState {

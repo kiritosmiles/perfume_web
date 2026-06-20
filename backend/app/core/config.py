@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = ""  # Set via env; empty = use template fallback
     LLM_BASE_URL: str = "https://api.deepseek.com/v1"
     LLM_MODEL: str = "deepseek-chat"
-    LLM_TIMEOUT: float = 5.0  # seconds — TRD §2.2: gen.copy < 2s
+    LLM_TIMEOUT: float = 8.0  # seconds — shared by emotion (2s) + copy (5s)
 
     @property
     def pg_dsn(self) -> str:

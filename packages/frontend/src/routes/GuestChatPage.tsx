@@ -14,7 +14,9 @@ import { useSessionStore } from "../stores/sessionStore";
 import { useGenerationStore } from "../stores/generationStore";
 
 export function GuestChatPage() {
+  const [inputMode, setInputMode] = useState<"cards" | "text">("cards");
   const [cardIds, setCardIds] = useState<string[]>([]);
+  const [freeText, setFreeText] = useState("");
   const [sceneTag, setSceneTag] = useState<string>("");
   const [sseUrl, setSseUrl] = useState<string | null>(null);
 
@@ -38,10 +40,18 @@ export function GuestChatPage() {
     setSceneTag((prev) => (prev === id ? "" : id));
   }, []);
 
+  const canStart =
+    inputMode === "cards" ? cardIds.length > 0 : freeText.trim().length > 0;
+
   const handleStart = () => {
-    if (cardIds.length === 0) return;
+    if (!canStart) return;
     const params = new URLSearchParams();
-    params.set("card_ids", cardIds.join(","));
+    if (inputMode === "cards") {
+      params.set("card_ids", cardIds.join(","));
+    } else {
+      params.set("card_ids", "");
+      params.set("text", freeText.trim());
+    }
     if (sceneTag) params.set("scene", sceneTag);
     setSseUrl(`/api/v1/guest/sessions?${params.toString()}`);
   };
@@ -50,9 +60,17 @@ export function GuestChatPage() {
     close();
     setSseUrl(null);
     setCardIds([]);
+    setFreeText("");
     setSceneTag("");
     useSessionStore.getState().reset();
     useGenerationStore.getState().reset();
+  };
+
+  const handleCorrect = () => {
+    close();
+    setSseUrl(null);
+    setCardIds([]);
+    setFreeText("");
   };
 
   const isGenerating =
@@ -96,13 +114,50 @@ export function GuestChatPage() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="max-w-md mx-auto pt-8 space-y-8"
+            className="max-w-md mx-auto pt-8 space-y-6"
           >
-            <EmotionCardPicker
-              selectedIds={cardIds}
-              onToggle={handleToggleCard}
-              maxSelection={2}
-            />
+            {/* Mode toggle */}
+            <div className="flex rounded-full bg-stone-200/50 p-0.5">
+              {(["cards", "text"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => { setInputMode(mode); setCardIds([]); setFreeText(""); }}
+                  className={`flex-1 py-2 text-sm font-medium rounded-full transition-all
+                    ${inputMode === mode
+                      ? "bg-white text-stone-800 shadow-sm"
+                      : "text-stone-400 hover:text-stone-600"
+                    }`}
+                >
+                  {mode === "cards" ? "🎭 Pick a Card" : "✍️ Write how you feel"}
+                </button>
+              ))}
+            </div>
+
+            {inputMode === "cards" ? (
+              <EmotionCardPicker
+                selectedIds={cardIds}
+                onToggle={handleToggleCard}
+                maxSelection={2}
+              />
+            ) : (
+              <div className="space-y-2">
+                <textarea
+                  value={freeText}
+                  onChange={(e) => setFreeText(e.target.value)}
+                  placeholder="Describe how you're feeling right now..."
+                  rows={3}
+                  maxLength={300}
+                  className="w-full resize-none rounded-xl glass-card px-4 py-3 text-sm
+                             text-stone-800 placeholder-stone-400
+                             focus:outline-none focus:ring-2 focus:ring-stone-400
+                             transition-shadow"
+                />
+                <p className="text-xs text-stone-400 text-right">
+                  {freeText.length}/300
+                </p>
+              </div>
+            )}
+
             <div>
               <p className="text-xs text-stone-400 text-center mb-3 font-medium uppercase tracking-wider">
                 Optional · Scene
@@ -120,11 +175,7 @@ export function GuestChatPage() {
               visible={!!emotion.primary_emotion}
               primaryEmotion={emotion.primary_emotion || ""}
               confidence={emotion.confidence || 0}
-              onCorrect={() => {
-                close();
-                setSseUrl(null);
-                setCardIds([]);
-              }}
+              onCorrect={handleCorrect}
             />
           </div>
         )}
@@ -178,7 +229,7 @@ export function GuestChatPage() {
         {!hasStarted ? (
           <Button
             variant="primary"
-            disabled={cardIds.length === 0}
+            disabled={!canStart}
             onClick={handleStart}
             className="w-full"
           >

@@ -2,6 +2,7 @@ export interface GuestSessionInput {
   emotion_card_ids: string[];
   scene_tag: string | null;
   browser_id?: string;
+  user_text?: string | null;
 }
 
 export interface ApiError {

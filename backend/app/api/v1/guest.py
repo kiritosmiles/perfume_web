@@ -95,9 +95,10 @@ async def start_guest_session(input_data: GuestSessionInput, request: Request):
 @router.get("/guest/sessions")
 async def start_guest_session_get(
     request: Request,
-    card_ids: str = Query(..., description="Comma-separated emotion card ids, e.g. joy,calm"),
+    card_ids: str = Query(default="", description="Comma-separated emotion card ids, e.g. joy,calm"),
     scene: str = Query(default="", description="Scene tag"),
     browser_id: str = Query(default="", description="Browser identifier"),
+    text: str = Query(default="", description="Free-text mood description (alternative to card_ids)"),
 ):
     # Rate limit (TRD §6.2: 120 GET/min)
     if not await rate_limit_guest(request):
@@ -109,10 +110,12 @@ async def start_guest_session_get(
 
     card_list = [c.strip() for c in card_ids.split(",") if c.strip()]
     browser_id_val = browser_id or None
+    text_val = text.strip() or None
     input_data = GuestSessionInput(
         emotion_card_ids=card_list,
         scene_tag=scene or None,
         browser_id=browser_id_val,
+        user_text=text_val,
     )
 
     if browser_id_val:

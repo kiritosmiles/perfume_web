@@ -10,11 +10,13 @@ from app.core.deps import get_db_neo4j
 from app.core.pg import get_pg_pool
 from app.models.guest import GuestSessionInput
 from app.core.redis import cache_emotion_vector, get_cached_emotion_vector
-from app.services.emotion import resolve_emotion_from_cards
+from app.services.emotion import resolve_emotion_from_cards, EMOTION_LABELS, DIMENSIONS
 from app.services.fallback import search_fallback_fragrances
 from app.services.fragrance import search_fragrance_by_emotion
 from app.services.generation import build_skeleton, build_copy_stream
 from app.services.llm import generate_copy_for_perfume
+from app.services.llm_emotion import resolve_emotion_from_text
+from app.services.safety import crisis_check
 from app.sse.protocol import sse, now_iso
 
 logger = logging.getLogger(__name__)
@@ -24,11 +26,19 @@ async def _log_guest_user_message(
     browser_id: str,
     generation_id: str,
     emotion_result: dict,
+    user_text: str | None = None,
 ) -> None:
-    """Persist the user's card pick to temp_conversations for Phase 2 migration."""
+    """Persist the user's card pick or text to temp_conversations."""
     try:
         pool = await get_pg_pool()
         async with pool.acquire() as conn:
+            content = {
+                "primary_emotion": emotion_result["primary_emotion"],
+                "confidence": emotion_result["confidence"],
+                "source": emotion_result["source"],
+            }
+            if user_text:
+                content["user_text"] = user_text
             await conn.execute(
                 """
                 INSERT INTO temp_conversations
@@ -36,11 +46,7 @@ async def _log_guest_user_message(
                 VALUES ($1, 0, 'user', $2, $3, now())
                 """,
                 browser_id,
-                json.dumps({
-                    "primary_emotion": emotion_result["primary_emotion"],
-                    "confidence": emotion_result["confidence"],
-                    "source": emotion_result["source"],
-                }, ensure_ascii=False),
+                json.dumps(content, ensure_ascii=False),
                 json.dumps(emotion_result["emotion_vector"], ensure_ascii=False),
             )
     except Exception:
@@ -79,11 +85,53 @@ async def _log_guest_agent_message(
         logger.warning("Failed to persist agent message for %s", browser_id, exc_info=True)
 
 
+async def _resolve_emotion(input_data: GuestSessionInput) -> dict:
+    """3-channel emotion resolution: text, cards, or dual-channel blend."""
+    has_cards = bool(input_data.emotion_card_ids)
+    has_text = bool(input_data.user_text and input_data.user_text.strip())
+
+    if has_text and has_cards:
+        text_result = await resolve_emotion_from_text(input_data.user_text)  # type: ignore[arg-type]
+        card_result = resolve_emotion_from_cards(input_data)
+        blended = {}
+        for dim in DIMENSIONS:
+            blended[dim] = (
+                card_result["emotion_vector"].get(dim, 0) * 0.3
+                + text_result["emotion_vector"].get(dim, 0) * 0.7
+            )
+        primary = max(DIMENSIONS, key=lambda d: blended[d])
+        return {
+            "emotion_vector": blended,
+            "primary_emotion": EMOTION_LABELS[primary],
+            "confidence": blended[primary],
+            "source": "llm_text",
+        }
+    elif has_text:
+        return await resolve_emotion_from_text(input_data.user_text)  # type: ignore[arg-type]
+    else:
+        return resolve_emotion_from_cards(input_data)
+
+
 async def sse_event_stream(
     input_data: GuestSessionInput,
 ) -> AsyncGenerator[str, None]:
     generation_id = str(uuid.uuid4())
     message_id = str(uuid.uuid4())
+
+    # 0) Safety check for text input
+    if input_data.user_text and input_data.user_text.strip():
+        check = crisis_check(input_data.user_text)
+        if check["is_crisis"] and check["severity"] == "high":
+            yield sse("safety.crisis", {
+                "severity": "high",
+                "message": "我们检测到你可能需要专业帮助。以下热线可以提供支持：",
+                "hotlines": check.get("hotlines", []),
+            })
+            yield sse("safety.block", {
+                "reason": "crisis_content",
+                "user_message": "请拨打心理援助热线寻求专业帮助。",
+            })
+            return
 
     # 1) chat.ack
     yield sse("chat.ack", {
@@ -93,22 +141,27 @@ async def sse_event_stream(
 
     await asyncio.sleep(0)  # Yield event loop
 
-    # 2) chat.emotion (with Redis cache)
+    # 2) chat.emotion — 3-channel resolution (text / cards / dual)
     card_key = ",".join(sorted(input_data.emotion_card_ids))
-    cached_vector = await get_cached_emotion_vector(card_key)
-    if cached_vector is not None:
-        # Use cached vector directly — deterministic from card IDs
-        from app.services.emotion import EMOTION_LABELS, DIMENSIONS
-        primary = max(DIMENSIONS, key=lambda d: cached_vector[d])
-        emotion_result = {
-            "emotion_vector": cached_vector,
-            "primary_emotion": EMOTION_LABELS[primary],
-            "confidence": cached_vector[primary],
-            "source": "card_preset",
-        }
+    has_text = bool(input_data.user_text and input_data.user_text.strip())
+
+    if card_key and not has_text:
+        # Card-only: try Redis cache
+        cached_vector = await get_cached_emotion_vector(card_key)
+        if cached_vector is not None:
+            primary = max(DIMENSIONS, key=lambda d: cached_vector[d])
+            emotion_result = {
+                "emotion_vector": cached_vector,
+                "primary_emotion": EMOTION_LABELS[primary],
+                "confidence": cached_vector[primary],
+                "source": "card_preset",
+            }
+        else:
+            emotion_result = resolve_emotion_from_cards(input_data)
+            await cache_emotion_vector(card_key, emotion_result["emotion_vector"])
     else:
-        emotion_result = resolve_emotion_from_cards(input_data)
-        await cache_emotion_vector(card_key, emotion_result["emotion_vector"])
+        # Text or dual-channel (no cache — text is unique per request)
+        emotion_result = await _resolve_emotion(input_data)
     yield sse("chat.emotion", {
         "emotion_vector": emotion_result["emotion_vector"],
         "primary_emotion": emotion_result["primary_emotion"],
@@ -118,7 +171,10 @@ async def sse_event_stream(
 
     # Persist user message for Phase 2 registration migration
     if input_data.browser_id:
-        await _log_guest_user_message(input_data.browser_id, generation_id, emotion_result)
+        await _log_guest_user_message(
+            input_data.browser_id, generation_id, emotion_result,
+            user_text=input_data.user_text,
+        )
 
     await asyncio.sleep(0)
 

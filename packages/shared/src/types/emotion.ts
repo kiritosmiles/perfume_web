@@ -11,7 +11,7 @@ export interface EmotionResult {
   emotion_vector: EmotionVector;
   primary_emotion: string;
   confidence: number;
-  source: "card_preset" | "bert" | "llm_fallback";
+  source: "card_preset" | "bert" | "llm_fallback" | "llm_text";
 }
 
 export interface SceneTag {
