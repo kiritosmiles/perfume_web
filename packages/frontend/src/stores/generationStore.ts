@@ -1,17 +1,10 @@
 import { create } from "zustand";
+import type { RecommendationSkeleton } from "@perfume/shared";
 
-export interface SkeletonCard {
-  rank: number;
-  name: string;
-  brand: string;
-  notes_combination: string[];
-  match_score: number;
-  source: string;
-  allergen_warnings: string[];
-  is_partial: true;
-}
+// Re-export shared type for consumers
+export type SkeletonCard = RecommendationSkeleton;
 
-export interface FragranceCardUI extends Omit<SkeletonCard, "is_partial"> {
+export interface FragranceCardUI extends Omit<RecommendationSkeleton, "is_partial"> {
   expanded_fields?: Record<string, unknown>;
   copy_text: string;
 }
@@ -32,7 +25,7 @@ interface GenerationState {
   error: { code: string; user_message: string; degraded: boolean } | null;
 
   startGeneration: (id: string, mode: "fast" | "deep") => void;
-  setSkeleton: (recs: SkeletonCard[]) => void;
+  setSkeleton: (recs: RecommendationSkeleton[]) => void;
   addDetail: (rank: number, fields: Record<string, unknown>) => void;
   addCopyChunk: (rank: number, chunk: string) => void;
   completeGeneration: () => void;

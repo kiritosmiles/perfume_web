@@ -47,6 +47,11 @@ async def search_fragrance_by_emotion(
     if not emotions_param:
         emotions_param = [{"name": sorted_emotions[0][0], "weight": sorted_emotions[0][1]}]
 
-    result = await session.run(query, emotions=emotions_param, limit=limit)
+    result = await session.run(
+        query,
+        emotions=emotions_param,
+        limit=limit,
+        timeout=3.0,  # 3s hard timeout — TRD §2.2: GraphRAG < 200ms typical
+    )
     records = await result.data()
     return records
