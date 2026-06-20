@@ -14,6 +14,7 @@ from app.services.emotion import resolve_emotion_from_cards
 from app.services.fallback import search_fallback_fragrances
 from app.services.fragrance import search_fragrance_by_emotion
 from app.services.generation import build_skeleton, build_copy_stream
+from app.services.llm import generate_copy_for_perfume
 from app.sse.protocol import sse, now_iso
 
 logger = logging.getLogger(__name__)
@@ -194,19 +195,39 @@ async def sse_event_stream(
         })
         await asyncio.sleep(0)
 
-    # 7) gen.copy chunks per card
+    # 7) gen.copy — LLM streaming with template fallback
     for sk in skeletons:
-        copy_chunks = build_copy_stream(
-            sk["rank"], generation_id, emotion_result["primary_emotion"]
-        )
-        for i, chunk in enumerate(copy_chunks):
-            yield sse("gen.copy", {
-                "generation_id": generation_id,
-                "rank": sk["rank"],
-                "copy_text_chunk": chunk,
-                "is_final": (i == len(copy_chunks) - 1),
-            })
-            await asyncio.sleep(0)
+        llm_chunks: list[str] = []
+        async for chunk, _ in generate_copy_for_perfume(
+            sk["rank"], generation_id,
+            sk["name"], sk["brand"],
+            emotion_result["primary_emotion"],
+            sk.get("notes_combination", []),
+        ):
+            llm_chunks.append(chunk)
+
+        if llm_chunks:
+            for i, chunk in enumerate(llm_chunks):
+                yield sse("gen.copy", {
+                    "generation_id": generation_id,
+                    "rank": sk["rank"],
+                    "copy_text_chunk": chunk,
+                    "is_final": (i == len(llm_chunks) - 1),
+                })
+                await asyncio.sleep(0)
+        else:
+            # LLM unavailable → fall back to templates
+            copy_chunks = build_copy_stream(
+                sk["rank"], generation_id, emotion_result["primary_emotion"]
+            )
+            for i, chunk in enumerate(copy_chunks):
+                yield sse("gen.copy", {
+                    "generation_id": generation_id,
+                    "rank": sk["rank"],
+                    "copy_text_chunk": chunk,
+                    "is_final": (i == len(copy_chunks) - 1),
+                })
+                await asyncio.sleep(0)
 
     # Persist agent response for Phase 2 registration migration
     if input_data.browser_id:
