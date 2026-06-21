@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "deepseek-chat"
     LLM_TIMEOUT: float = 8.0  # seconds — shared by emotion (2s) + copy (5s)
 
+    # Auth
+    JWT_SECRET: str = "perfume-dev-secret"  # Override in production!
+
     @property
     def pg_dsn(self) -> str:
         return (
