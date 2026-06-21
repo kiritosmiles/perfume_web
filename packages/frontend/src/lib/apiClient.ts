@@ -138,3 +138,13 @@ export async function saveLLMKey(input: LLMKeyInput): Promise<{ status: string }
 export async function getLLMKeyStatus(browserId: string): Promise<LLMKeyStatus> {
   return apiGet<LLMKeyStatus>(`/config/llm-key/status?browser_id=${encodeURIComponent(browserId)}`);
 }
+
+export function getBrowserId(): string {
+  const key = "perfume_browser_id";
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(key, id);
+  }
+  return id;
+}

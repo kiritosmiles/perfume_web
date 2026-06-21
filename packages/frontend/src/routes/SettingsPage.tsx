@@ -1,17 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "../components/ui/Button";
-import { saveLLMKey, getLLMKeyStatus } from "../lib/apiClient";
-
-function getBrowserId(): string {
-  const key = "perfume_browser_id";
-  let id = localStorage.getItem(key);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(key, id);
-  }
-  return id;
-}
+import { saveLLMKey, getLLMKeyStatus, getBrowserId } from "../lib/apiClient";
 
 export function SettingsPage() {
   const browserId = getBrowserId();
