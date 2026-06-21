@@ -11,6 +11,7 @@ interface EmotionCardProps {
 }
 
 export function EmotionCard({
+  id,
   emoji,
   label,
   selected,
@@ -22,6 +23,7 @@ export function EmotionCard({
 
   return (
     <motion.button
+      data-emotion-id={id}
       whileTap={isDimmed ? { scale: 1 } : { scale: 0.95 }}
       animate={
         shake

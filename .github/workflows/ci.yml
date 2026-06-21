@@ -55,3 +55,111 @@ jobs:
 
       - name: Vitest
         run: npx vitest run
+
+  e2e:
+    name: E2E — Playwright
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: perfume
+          POSTGRES_PASSWORD: perfume_dev
+          POSTGRES_DB: perfume
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: packages/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install backend deps
+        working-directory: backend
+        run: poetry install --no-interaction --no-root
+
+      - name: Run DB migration
+        working-directory: backend
+        run: poetry run alembic upgrade head
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: perfume
+          DB_PASSWORD: perfume_dev
+          DB_NAME: perfume
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install frontend deps
+        run: |
+          cd ../..
+          npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Create test share link
+        working-directory: backend
+        run: |
+          SHARE_ID=$(poetry run python -c "
+          import asyncio, secrets, string, json
+          async def main():
+              from app.core.pg import init_pg_pool, get_pg_pool
+              await init_pg_pool()
+              pool = await get_pg_pool()
+              sid = ''.join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(8))
+              payload = json.dumps({
+                  'recommendations': [{'rank': 1, 'name': 'Test Bloom', 'brand': 'Test House', 'notes_combination': ['rose', 'jasmine'], 'match_score': 90, 'copy_text': 'A test fragrance.'}],
+                  'emotion': {'primary_emotion': '开心', 'confidence': 0.9}
+              })
+              async with pool.acquire() as conn:
+                  await conn.execute(
+                      'INSERT INTO share_links (id, payload, expires_at) VALUES (\$1, \$2, NOW() + INTERVAL \"7 days\")',
+                      sid, payload
+                  )
+              print(sid)
+          asyncio.run(main())
+          ")
+          echo "TEST_SHARE_ID=$SHARE_ID" >> $GITHUB_ENV
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: perfume
+          DB_PASSWORD: perfume_dev
+          DB_NAME: perfume
+
+      - name: Run Playwright tests
+        run: npx playwright test
+        env:
+          TEST_SHARE_ID: ${{ env.TEST_SHARE_ID }}
+
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshots
+          path: packages/frontend/test-results/
