@@ -25,7 +25,7 @@
 | L1 存储 | Redis Hash（session TTL） | 低延迟，会话生命周期 |
 | L2 存储 | PostgreSQL + pgvector 向量扩展 | 持久化，跨会话检索 |
 | L3 存储 | PostgreSQL + pgvector | 与 L2 同表不同层级标记 |
-| Embedding | bge-small-zh (~24MB, 768d) | 本地推理 ~5ms，中文优化 |
+| Embedding | bge-small-zh (~24MB, 512d) | 本地推理 ~5ms，中文优化 |
 | L1 整合 | 写入同步 + LLM 异步（两段式） | 证据不丢，整合不阻塞 SSE |
 | L2 整合 | Redis Queue 异步（会话结束时入队） | 不阻塞主流程 |
 | L3 整合 | Cron 定时（每日凌晨 3am） | 无实时性要求 |
@@ -47,7 +47,7 @@ Key:   memory:L1:{session_id}:{round_num}
 Type:  Hash
 Fields:
   - text: str           # 第三人称事实摘要
-  - embedding: bytes    # bge-small-zh 768d float32 → bytes
+  - embedding: bytes    # bge-small-zh 512d float32 → bytes
   - timestamp: str      # ISO 8601
   - round_num: int      # 会话内轮次序号
   - emotion_vector: str # JSON, 8维情绪向量
@@ -63,7 +63,7 @@ CREATE TABLE memory_l2 (
     browser_id TEXT,                -- Guest 用户标识（注册前）
     session_id UUID NOT NULL,
     text TEXT NOT NULL,              -- 去重后的事件摘要（会话级压缩）
-    embedding vector(768),           -- pgvector 扩展
+    embedding vector(512),           -- pgvector 扩展
     emotion_profile JSONB DEFAULT '{}',  -- 会话内情绪分布统计
     round_count INTEGER NOT NULL DEFAULT 0,  -- 原始对话轮数
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -405,7 +405,7 @@ Response:
 | L1 LLM 整合 | ~500ms | gen.complete 后异步执行，不阻塞主流程 |
 | L2 会话整合 (LLM) | ~2s | 1 次 LLM，多片段输入，异步 |
 | L3 日级整合 (LLM) | ~3s | 1 次 LLM，多摘要输入，Cron |
-| bge-small-zh encode | ~5ms | 本地 CPU，768d |
+| bge-small-zh encode | ~5ms | 本地 CPU，512d |
 | 召回规划器 (LLM) | ~200ms | 轻量 Prompt，JSON 输出 |
 | 分层检索 (向量+ts_rank) | ~10ms | pgvector cosine + PostgreSQL ts_rank |
 | 召回门控 (LLM) | ~300ms | 过滤+排序，短回答 |
