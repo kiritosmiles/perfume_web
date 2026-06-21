@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import { EmotionCardPicker } from "../components/emotion/EmotionCardPicker";
 import { EmotionConfirmation } from "../components/emotion/EmotionConfirmation";
@@ -9,6 +9,8 @@ import { ThinkingIndicator } from "../components/chat/ThinkingIndicator";
 import { FragranceCard } from "../components/fragrance/FragranceCard";
 import { Button } from "../components/ui/Button";
 import { NetworkStatusBar } from "../components/ui/NetworkStatusBar";
+import { NoteCard } from "../components/notes/NoteCard";
+import { ExportButton } from "../components/notes/ExportButton";
 import { useSSE } from "../hooks/useSSE";
 import { useSessionStore } from "../stores/sessionStore";
 import { useGenerationStore } from "../stores/generationStore";
@@ -27,6 +29,9 @@ export function GuestChatPage() {
   const generationError = useGenerationStore((s) => s.error);
 
   const { close } = useSSE({ url: sseUrl });
+
+  const noteRef = useRef<HTMLDivElement>(null);
+  const noteFilename = `perfume-note-${new Date().toISOString().slice(0, 10)}.png`;
 
   const handleToggleCard = useCallback((id: string) => {
     setCardIds((prev) => {
@@ -236,13 +241,16 @@ export function GuestChatPage() {
             Start Exploring
           </Button>
         ) : generationPhase === "complete" ? (
-          <Button
-            variant="glass"
-            onClick={handleReset}
-            className="w-full"
-          >
-            Start New Session
-          </Button>
+          <div className="flex gap-2 w-full">
+            <ExportButton targetRef={noteRef} filename={noteFilename} />
+            <Button
+              variant="primary"
+              onClick={handleReset}
+              className="flex-1"
+            >
+              Start New Session
+            </Button>
+          </div>
         ) : generationPhase === "error" ? (
           <Button
             variant="primary"
@@ -253,6 +261,17 @@ export function GuestChatPage() {
           </Button>
         ) : null}
       </ChatInput>
+
+      {/* Offscreen note card for PNG export */}
+      <div ref={noteRef} className="fixed -left-[9999px] top-0">
+        <NoteCard
+          cards={cards}
+          primaryEmotion={emotion?.primary_emotion || "Unknown"}
+          confidence={emotion?.confidence || 0}
+          sceneTag={sceneTag || undefined}
+          generationId={useGenerationStore.getState().generationId || undefined}
+        />
+      </div>
     </div>
   );
 }

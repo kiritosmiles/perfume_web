@@ -14,6 +14,7 @@
   "dependencies": {
     "@perfume/shared": "*",
     "framer-motion": "^11.5.0",
+    "html-to-image": "^1.11.13",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-router-dom": "^6.26.0",
