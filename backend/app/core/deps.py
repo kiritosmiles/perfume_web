@@ -1,6 +1,7 @@
 from typing import AsyncGenerator
 
 import asyncpg
+from fastapi import Depends, HTTPException, Request, status
 from neo4j._async.work.session import AsyncSession
 
 from app.core.pg import get_pg_pool
@@ -16,3 +17,36 @@ async def get_db_pg() -> AsyncGenerator[asyncpg.Connection, None]:
     pool = await get_pg_pool()
     async with pool.acquire() as conn:
         yield conn
+
+
+async def get_current_user(request: Request) -> dict:
+    """Extract JWT from Authorization header, return {id, email}."""
+    from app.core.auth import decode_token
+    from app.core.pg import get_pg_pool
+
+    auth = request.headers.get("Authorization")
+    if not auth or not auth.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authorization header")
+
+    token = auth.removeprefix("Bearer ")
+    try:
+        payload = decode_token(token)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+
+    if payload.get("type") != "access":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token type must be 'access'")
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing sub claim")
+
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, email FROM users WHERE id = $1::uuid", user_id
+        )
+        if not row:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+        return {"id": str(row["id"]), "email": row["email"]}
