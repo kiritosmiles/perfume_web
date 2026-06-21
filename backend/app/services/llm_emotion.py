@@ -85,17 +85,19 @@ def _keyword_fallback(text: str) -> dict[str, float] | None:
     return result
 
 
-async def _call_llm_emotion(text: str) -> dict[str, float] | None:
+async def _call_llm_emotion(text: str, api_key_override: str | None = None, base_url_override: str | None = None) -> dict[str, float] | None:
     """Call LLM API to classify emotion. Returns vector or None on failure."""
-    if not settings.LLM_API_KEY:
+    api_key = api_key_override or settings.LLM_API_KEY
+    if not api_key:
         return None
+    base_url = base_url_override or settings.LLM_BASE_URL
 
     try:
         async with httpx.AsyncClient(timeout=LLM_EMOTION_TIMEOUT) as client:
             response = await client.post(
-                f"{settings.LLM_BASE_URL}/chat/completions",
+                f"{base_url}/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {settings.LLM_API_KEY}",
+                    "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                 },
                 json={
@@ -129,7 +131,7 @@ async def _call_llm_emotion(text: str) -> dict[str, float] | None:
         return None
 
 
-async def resolve_emotion_from_text(user_text: str) -> dict:
+async def resolve_emotion_from_text(user_text: str, api_key_override: str | None = None, base_url_override: str | None = None) -> dict:
     """Classify emotion from free-text, with LLM → keyword → calm fallback chain.
 
     Returns:
@@ -141,7 +143,7 @@ async def resolve_emotion_from_text(user_text: str) -> dict:
         }
     """
     # Layer 1: LLM classification
-    vector = await _call_llm_emotion(user_text)
+    vector = await _call_llm_emotion(user_text, api_key_override=api_key_override, base_url_override=base_url_override)
 
     if vector is not None:
         primary_dim = max(DIMENSIONS, key=lambda d: vector[d])

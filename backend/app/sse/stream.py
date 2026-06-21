@@ -9,7 +9,7 @@ from neo4j.exceptions import Neo4jError, ServiceUnavailable, SessionExpired
 from app.core.deps import get_db_neo4j
 from app.core.pg import get_pg_pool
 from app.models.guest import GuestSessionInput
-from app.core.redis import cache_emotion_vector, get_cached_emotion_vector
+from app.core.redis import cache_emotion_vector, get_cached_emotion_vector, get_llm_key
 from app.services.emotion import resolve_emotion_from_cards, EMOTION_LABELS, DIMENSIONS
 from app.services.fallback import search_fallback_fragrances
 from app.services.fragrance import search_fragrance_by_emotion
@@ -85,13 +85,21 @@ async def _log_guest_agent_message(
         logger.warning("Failed to persist agent message for %s", browser_id, exc_info=True)
 
 
-async def _resolve_emotion(input_data: GuestSessionInput) -> dict:
+async def _resolve_emotion(
+    input_data: GuestSessionInput,
+    api_key_override: str | None = None,
+    base_url_override: str | None = None,
+) -> dict:
     """3-channel emotion resolution: text, cards, or dual-channel blend."""
     has_cards = bool(input_data.emotion_card_ids)
     has_text = bool(input_data.user_text and input_data.user_text.strip())
 
     if has_text and has_cards:
-        text_result = await resolve_emotion_from_text(input_data.user_text)  # type: ignore[arg-type]
+        text_result = await resolve_emotion_from_text(
+            input_data.user_text,  # type: ignore[arg-type]
+            api_key_override=api_key_override,
+            base_url_override=base_url_override,
+        )
         card_result = resolve_emotion_from_cards(input_data)
         blended = {}
         for dim in DIMENSIONS:
@@ -107,7 +115,11 @@ async def _resolve_emotion(input_data: GuestSessionInput) -> dict:
             "source": "llm_text",
         }
     elif has_text:
-        return await resolve_emotion_from_text(input_data.user_text)  # type: ignore[arg-type]
+        return await resolve_emotion_from_text(
+            input_data.user_text,  # type: ignore[arg-type]
+            api_key_override=api_key_override,
+            base_url_override=base_url_override,
+        )
     else:
         return resolve_emotion_from_cards(input_data)
 
@@ -117,6 +129,15 @@ async def sse_event_stream(
 ) -> AsyncGenerator[str, None]:
     generation_id = str(uuid.uuid4())
     message_id = str(uuid.uuid4())
+
+    # Look up user-provided LLM key (if any)
+    user_api_key: str | None = None
+    user_base_url: str | None = None
+    if input_data.browser_id:
+        key_data = await get_llm_key(input_data.browser_id)
+        if key_data:
+            user_api_key = key_data.get("api_key")
+            user_base_url = key_data.get("base_url") or None
 
     # 0) Safety check for text input
     if input_data.user_text and input_data.user_text.strip():
@@ -161,7 +182,11 @@ async def sse_event_stream(
             await cache_emotion_vector(card_key, emotion_result["emotion_vector"])
     else:
         # Text or dual-channel (no cache — text is unique per request)
-        emotion_result = await _resolve_emotion(input_data)
+        emotion_result = await _resolve_emotion(
+            input_data,
+            api_key_override=user_api_key,
+            base_url_override=user_base_url,
+        )
     yield sse("chat.emotion", {
         "emotion_vector": emotion_result["emotion_vector"],
         "primary_emotion": emotion_result["primary_emotion"],
@@ -259,6 +284,8 @@ async def sse_event_stream(
             sk["name"], sk["brand"],
             emotion_result["primary_emotion"],
             sk.get("notes_combination", []),
+            api_key_override=user_api_key,
+            base_url_override=user_base_url,
         ):
             llm_chunks.append(chunk)
 
