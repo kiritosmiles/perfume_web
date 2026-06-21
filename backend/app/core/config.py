@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "deepseek-chat"
     LLM_TIMEOUT: float = 8.0  # seconds — shared by emotion (2s) + copy (5s)
 
+    # Memory (TiMem)
+    BGE_MODEL_PATH: str = "BAAI/bge-small-zh"
+    RECALL_TOP_K_L1: int = 20
+    RECALL_TOP_K_L2: int = 4
+    RECALL_TOP_K_L3: int = 2
+    RECALL_GATE_TIMEOUT: float = 2.0
+    L2_IDLE_SECONDS: int = 30
+
     # Auth
     JWT_SECRET: str = "perfume-dev-secret"  # Override in production!
 
