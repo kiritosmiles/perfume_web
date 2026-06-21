@@ -52,6 +52,49 @@ export async function apiPost<T>(
   return response.json() as Promise<T>;
 }
 
+export interface SharePayloadData {
+  recommendations: Array<{
+    rank: number;
+    name: string;
+    brand: string;
+    notes_combination?: string[];
+    match_score: number;
+    copy_text?: string;
+  }>;
+  emotion: {
+    primary_emotion: string;
+    confidence: number;
+    emotion_vector?: Record<string, number>;
+  };
+  scene_tag?: string | null;
+  generation_id?: string | null;
+}
+
+export interface ShareCreateResponse {
+  share_id: string;
+  share_url: string;
+}
+
+export interface ShareDetailResponse {
+  share_id: string;
+  payload: SharePayloadData;
+  created_at: string | null;
+  expires_at: string | null;
+}
+
+export async function createShareLink(input: {
+  recommendations: Array<Record<string, unknown>>;
+  emotion: Record<string, unknown>;
+  scene_tag?: string | null;
+  generation_id?: string | null;
+}): Promise<ShareCreateResponse> {
+  return apiPost<ShareCreateResponse>("/share", input);
+}
+
+export async function getShareDetail(shareId: string): Promise<ShareDetailResponse> {
+  return apiGet<ShareDetailResponse>(`/share/${shareId}`);
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`);
 
@@ -76,4 +119,22 @@ export async function apiGet<T>(path: string): Promise<T> {
   }
 
   return response.json() as Promise<T>;
+}
+
+export interface LLMKeyInput {
+  browser_id: string;
+  api_key: string;
+  base_url?: string | null;
+}
+
+export interface LLMKeyStatus {
+  configured: boolean;
+}
+
+export async function saveLLMKey(input: LLMKeyInput): Promise<{ status: string }> {
+  return apiPost<{ status: string }>("/config/llm-key", input);
+}
+
+export async function getLLMKeyStatus(browserId: string): Promise<LLMKeyStatus> {
+  return apiGet<LLMKeyStatus>(`/config/llm-key/status?browser_id=${encodeURIComponent(browserId)}`);
 }

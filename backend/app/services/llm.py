@@ -36,10 +36,14 @@ async def _stream_llm_copy(
     brand: str,
     emotion_cn: str,
     notes: list[str],
+    api_key_override: str | None = None,
+    base_url_override: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Call LLM API and yield sentence-level chunks."""
-    if not settings.LLM_API_KEY:
+    api_key = api_key_override or settings.LLM_API_KEY
+    if not api_key:
         return  # Caller should fall back to templates
+    base_url = base_url_override or settings.LLM_BASE_URL
 
     user_prompt = f"香水：{perfume_name}\n品牌：{brand}\n情绪：{emotion_cn}\n香调：{', '.join(notes[:4])}"
 
@@ -47,9 +51,9 @@ async def _stream_llm_copy(
         async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT) as client:
             async with client.stream(
                 "POST",
-                f"{settings.LLM_BASE_URL}/chat/completions",
+                f"{base_url}/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {settings.LLM_API_KEY}",
+                    "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                 },
                 json={
@@ -122,6 +126,8 @@ async def generate_copy_for_perfume(
     brand: str,
     emotion_cn: str,
     notes: list[str],
+    api_key_override: str | None = None,
+    base_url_override: str | None = None,
 ) -> AsyncGenerator[tuple[str, bool], None]:
     """Yield (chunk_text, is_final) for a single perfume card.
 
@@ -129,7 +135,11 @@ async def generate_copy_for_perfume(
     """
     chunks_yielded = 0
 
-    async for chunk in _stream_llm_copy(perfume_name, brand, emotion_cn, notes):
+    async for chunk in _stream_llm_copy(
+        perfume_name, brand, emotion_cn, notes,
+        api_key_override=api_key_override,
+        base_url_override=base_url_override,
+    ):
         chunks_yielded += 1
         yield chunk, False  # is_final determined by caller
 

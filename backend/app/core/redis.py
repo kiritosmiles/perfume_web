@@ -93,6 +93,36 @@ async def reset_redis_quota(browser_id: str) -> None:
     await r.delete(f"guest_quota:{browser_id}")
 
 
+# ── User-provided LLM key (24h TTL per browser session) ────────────────────────
+
+LLM_KEY_TTL = 86400  # 24 hours
+
+
+async def store_llm_key(browser_id: str, api_key: str, base_url: str | None = None) -> None:
+    """Store user-provided LLM API key in Redis, keyed by browser_id.
+
+    Gracefully does nothing if Redis is not initialized.
+    """
+    r = _get_client()
+    if r is None:
+        return
+    import json
+    data = json.dumps({"api_key": api_key, "base_url": base_url or ""})
+    await r.set(f"llm_key:{browser_id}", data, ex=LLM_KEY_TTL)
+
+
+async def get_llm_key(browser_id: str) -> dict | None:
+    """Retrieve user-provided LLM key. Returns None if not set or Redis unavailable."""
+    r = _get_client()
+    if r is None:
+        return None
+    import json
+    raw = await r.get(f"llm_key:{browser_id}")
+    if not raw:
+        return None
+    return json.loads(raw)
+
+
 # ── Health check ──────────────────────────────────────────────────────────────
 
 async def check_redis_health() -> bool:

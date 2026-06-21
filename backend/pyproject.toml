@@ -21,9 +21,8 @@ sqlalchemy = "^2.0.0"
 alembic = "^1.18.0"
 
 [tool.pytest.ini_options]
-asyncio_default_fixture_loop_scope = "function"
-# Use function-scoped event loops, but reset the shared Neo4j driver between
-# SSE tests to prevent cross-loop connection corruption (Windows proactor)
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 markers = [
     "e2e: end-to-end tests (require Docker services, run separately from unit tests)",
     "integration: tests requiring Neo4j connectivity",

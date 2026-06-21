@@ -12,6 +12,7 @@ import { NetworkStatusBar } from "../components/ui/NetworkStatusBar";
 import { useSSE } from "../hooks/useSSE";
 import { useSessionStore } from "../stores/sessionStore";
 import { useGenerationStore } from "../stores/generationStore";
+import { createShareLink } from "../lib/apiClient";
 
 export function GuestChatPage() {
   const [inputMode, setInputMode] = useState<"cards" | "text">("cards");
@@ -19,6 +20,8 @@ export function GuestChatPage() {
   const [freeText, setFreeText] = useState("");
   const [sceneTag, setSceneTag] = useState<string>("");
   const [sseUrl, setSseUrl] = useState<string | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   const emotion = useSessionStore((s) => s.emotion);
   const sseStatus = useSessionStore((s) => s.sseStatus);
@@ -71,6 +74,34 @@ export function GuestChatPage() {
     setSseUrl(null);
     setCardIds([]);
     setFreeText("");
+  };
+
+  const handleShare = async () => {
+    if (cards.length === 0 || !emotion) return;
+    setSharing(true);
+    try {
+      const res = await createShareLink({
+        recommendations: cards.map((c) => ({
+          rank: c.rank, name: c.name, brand: c.brand,
+          notes_combination: c.notes_combination,
+          match_score: c.match_score, copy_text: c.copy_text,
+        })),
+        emotion: {
+          primary_emotion: emotion.primary_emotion,
+          confidence: emotion.confidence,
+          emotion_vector: emotion.emotion_vector,
+        },
+        scene_tag: sceneTag || null,
+        generation_id: useGenerationStore.getState().generationId,
+      });
+      const fullUrl = `${window.location.origin}${res.share_url}`;
+      setShareUrl(fullUrl);
+      await navigator.clipboard.writeText(fullUrl);
+    } catch {
+      // Share failed silently
+    } finally {
+      setSharing(false);
+    }
   };
 
   const isGenerating =
@@ -236,13 +267,21 @@ export function GuestChatPage() {
             Start Exploring
           </Button>
         ) : generationPhase === "complete" ? (
-          <Button
-            variant="glass"
-            onClick={handleReset}
-            className="w-full"
-          >
-            Start New Session
-          </Button>
+          <div className="space-y-2 w-full">
+            {shareUrl && (
+              <div className="glass-card px-3 py-2 text-center text-xs text-green-700">
+                Link copied! 📋
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button variant="glass" size="sm" onClick={handleShare} disabled={sharing}>
+                {sharing ? "Creating link..." : "Share"}
+              </Button>
+              <Button variant="primary" onClick={handleReset} className="flex-1">
+                New Session
+              </Button>
+            </div>
+          </div>
         ) : generationPhase === "error" ? (
           <Button
             variant="primary"
