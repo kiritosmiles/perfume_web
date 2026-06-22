@@ -12,6 +12,13 @@ interface SessionState {
   emotion: EmotionState | null;
   sseStatus: "idle" | "connecting" | "active" | "retrying" | "disconnected";
   crisis: { is_crisis: boolean; severity: string } | null;
+  messageAcked: boolean;
+  recall: {
+    complexity: string;
+    recalled_count: number;
+    memory_sources: string[];
+    latency_ms: number;
+  } | null;
 
   setEmotion: (emotion: {
     emotion_vector: Record<string, number>;
@@ -20,6 +27,8 @@ interface SessionState {
     source: string;
   }) => void;
   setSSEStatus: (status: SessionState["sseStatus"]) => void;
+  setAck: (acked: boolean) => void;
+  setRecall: (recall: SessionState["recall"]) => void;
   setCrisis: (crisis: SessionState["crisis"]) => void;
   reset: () => void;
 }
@@ -29,6 +38,8 @@ const initialState = {
   emotion: null,
   sseStatus: "idle" as const,
   crisis: null,
+  messageAcked: false,
+  recall: null,
 };
 
 export const useSessionStore = create<SessionState>((set) => ({
@@ -45,6 +56,10 @@ export const useSessionStore = create<SessionState>((set) => ({
     }),
 
   setSSEStatus: (sseStatus) => set({ sseStatus }),
+
+  setAck: (acked) => set({ messageAcked: acked }),
+
+  setRecall: (recall) => set({ recall }),
 
   setCrisis: (crisis) => set({ crisis }),
 

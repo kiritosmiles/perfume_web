@@ -47,6 +47,56 @@ services:
       retries: 5
       start_period: 30s
 
+  worker_l2:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: perfume
+      DB_PASSWORD: ${DB_PASSWORD:-perfume_dev}
+      DB_NAME: perfume
+      REDIS_URL: redis://:${REDIS_PASSWORD:-perfume_dev}@redis:6379
+    command: python -m scripts.worker_l2
+    networks:
+      - default
+
+  cron_l3:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: perfume
+      DB_PASSWORD: ${DB_PASSWORD:-perfume_dev}
+      DB_NAME: perfume
+      REDIS_URL: redis://:${REDIS_PASSWORD:-perfume_dev}@redis:6379
+    entrypoint: >
+      sh -c '
+      while true; do
+        HOUR=$$(date +%H)
+        if [ "$$HOUR" = "03" ]; then
+          python -m scripts.consolidate_l3 --date $$(date +%Y-%m-%d)
+        fi
+        sleep 3600
+      done'
+    networks:
+      - default
+
 volumes:
   pgdata:
   redisdata:

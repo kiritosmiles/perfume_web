@@ -50,7 +50,7 @@ async def start_auth_session(
         )
     await consume_free_quota(user_id, "sessions")
     return StreamingResponse(
-        sse_event_stream(input_data),
+        sse_event_stream(input_data, user_id=user_id),
         media_type="text/event-stream",
         headers=_sse_headers(),
     )
@@ -80,7 +80,7 @@ async def start_auth_session_get(
         user_text=text_val,
     )
     return StreamingResponse(
-        sse_event_stream(input_data),
+        sse_event_stream(input_data, user_id=user_id),
         media_type="text/event-stream",
         headers=_sse_headers(),
     )

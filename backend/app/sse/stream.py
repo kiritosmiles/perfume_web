@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import logging
 import uuid
@@ -139,10 +140,34 @@ async def _enqueue_l2_after_delay(owner_type: str, owner_id: str, session_id: st
 async def sse_event_stream(
     input_data: GuestSessionInput,
     session_id: str | None = None,
+    user_id: str | None = None,
 ) -> AsyncGenerator[str, None]:
     generation_id = str(uuid.uuid4())
     message_id = str(uuid.uuid4())
     sid = session_id or str(uuid.uuid4())
+
+    # ── Heartbeat queue (background task → inline drain at each yield point) ──
+    hb_queue: asyncio.Queue = asyncio.Queue(maxsize=2)
+
+    async def _pump_heartbeats() -> None:
+        while True:
+            await asyncio.sleep(15)
+            try:
+                hb_queue.put_nowait(sse("system.heartbeat", {"ts": now_iso()}))
+            except asyncio.QueueFull:
+                pass
+
+    hb_task = asyncio.create_task(_pump_heartbeats())
+
+    def _drain_heartbeats() -> list[str]:
+        events: list[str] = []
+        while True:
+            try:
+                events.append(hb_queue.get_nowait())
+            except asyncio.QueueEmpty:
+                break
+        return events
+
 
     # Look up user-provided LLM key (if any)
     user_api_key: str | None = None
@@ -166,6 +191,9 @@ async def sse_event_stream(
                 "reason": "crisis_content",
                 "user_message": "请拨打心理援助热线寻求专业帮助。",
             })
+            hb_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await hb_task
             return
 
     # 1) chat.ack
@@ -174,6 +202,8 @@ async def sse_event_stream(
         "server_ts": now_iso(),
     })
 
+    for _hb in _drain_heartbeats():
+        yield _hb
     await asyncio.sleep(0)  # Yield event loop
 
     # 2) chat.emotion — 3-channel resolution (text / cards / dual)
@@ -208,20 +238,27 @@ async def sse_event_stream(
         "source": emotion_result["source"],
     })
 
-    # Persist user message for Phase 2 registration migration
-    if input_data.browser_id:
+    # Persist user message for Phase 2 registration migration (guest only)
+    if input_data.browser_id and not user_id:
         await _log_guest_user_message(
             input_data.browser_id, generation_id, emotion_result,
             user_text=input_data.user_text,
         )
 
+    for _hb in _drain_heartbeats():
+        yield _hb
     await asyncio.sleep(0)
 
     # ── 2.5) chat.recall — Complexity-aware memory recall (~510ms)
-    owner_type = "guest"
-    owner_id = input_data.browser_id or ""
-    if not owner_id:
-        owner_id = sid  # fallback to session_id
+    if user_id:
+        owner_type = "user"
+        owner_id = user_id
+    elif input_data.browser_id:
+        owner_type = "guest"
+        owner_id = input_data.browser_id
+    else:
+        owner_type = "guest"
+        owner_id = sid  # fallback: session-scoped guest
     recall_result = await recall_pipeline(
         user_text=input_data.user_text or "",
         emotion_result=emotion_result,
@@ -284,6 +321,8 @@ async def sse_event_stream(
         })
         # Continue to normal pipeline with fallback candidates
 
+    for _hb in _drain_heartbeats():
+        yield _hb
     await asyncio.sleep(0)
 
     # 5) gen.skeleton
@@ -295,6 +334,8 @@ async def sse_event_stream(
         "memory_context": recall_result.get("context_text", ""),
     })
 
+    for _hb in _drain_heartbeats():
+        yield _hb
     await asyncio.sleep(0)
 
     # 6) gen.detail per card — dynamic longevity/sillage/season from Neo4j
@@ -309,6 +350,8 @@ async def sse_event_stream(
                 "season": sk.get("season", "all"),
             },
         })
+        for _hb in _drain_heartbeats():
+            yield _hb
         await asyncio.sleep(0)
 
     # 7) gen.copy — LLM streaming with template fallback
@@ -332,6 +375,8 @@ async def sse_event_stream(
                     "copy_text_chunk": chunk,
                     "is_final": (i == len(llm_chunks) - 1),
                 })
+                for _hb in _drain_heartbeats():
+                    yield _hb
                 await asyncio.sleep(0)
         else:
             # LLM unavailable → fall back to templates
@@ -345,6 +390,8 @@ async def sse_event_stream(
                     "copy_text_chunk": chunk,
                     "is_final": (i == len(copy_chunks) - 1),
                 })
+                for _hb in _drain_heartbeats():
+                    yield _hb
                 await asyncio.sleep(0)
 
     # ── L1 Evidence Write (sync, <2ms) ──────────────────────────────────
@@ -359,8 +406,8 @@ async def sse_event_stream(
         except Exception:
             logger.warning("L1 evidence write failed", exc_info=True)
 
-    # Persist agent response for Phase 2 registration migration
-    if input_data.browser_id:
+    # Persist agent response for Phase 2 registration migration (guest only)
+    if input_data.browser_id and not user_id:
         await _log_guest_agent_message(
             input_data.browser_id, generation_id, skeletons, emotion_result
         )
@@ -380,6 +427,13 @@ async def sse_event_stream(
         )
 
     # ── L2 enqueue (fire-and-forget, 3s delay for gen.complete flush) ──
-    owner_type = "guest"
-    owner_id = input_data.browser_id or sid
-    asyncio.create_task(_enqueue_l2_after_delay(owner_type, owner_id, sid, 3.0))
+    _owner_type = "user" if user_id else "guest"
+    _owner_id = user_id or input_data.browser_id or sid
+    asyncio.create_task(_enqueue_l2_after_delay(_owner_type, _owner_id, sid, 3.0))
+
+    # ── Heartbeat cleanup ──
+    hb_task.cancel()
+    try:
+        await hb_task
+    except asyncio.CancelledError:
+        pass

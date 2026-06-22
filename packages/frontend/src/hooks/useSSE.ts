@@ -12,6 +12,8 @@ export function useSSE({ url }: UseSSEOptions) {
   const setEmotion = useSessionStore((s) => s.setEmotion);
   const setSSEStatus = useSessionStore((s) => s.setSSEStatus);
   const setCrisis = useSessionStore((s) => s.setCrisis);
+  const setAck = useSessionStore((s) => s.setAck);
+  const setRecall = useSessionStore((s) => s.setRecall);
 
   const startGeneration = useGenerationStore((s) => s.startGeneration);
   const setSkeleton = useGenerationStore((s) => s.setSkeleton);
@@ -39,6 +41,19 @@ export function useSSE({ url }: UseSSEOptions) {
               primary_emotion: data.primary_emotion as string,
               confidence: data.confidence as number,
               source: data.source as string,
+            });
+            break;
+
+          case "chat.ack":
+            setAck(true);
+            break;
+
+          case "chat.recall":
+            setRecall({
+              complexity: data.complexity as string,
+              recalled_count: data.recalled_count as number,
+              memory_sources: (data.memory_sources as string[]) || [],
+              latency_ms: data.latency_ms as number,
             });
             break;
 

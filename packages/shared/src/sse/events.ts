@@ -19,6 +19,7 @@ export type SSEEvent =
   | { type: "refine.result"; adjustments: unknown[]; updated_cards: unknown[] }
   | { type: "refine.gate"; verdict: "continue" | "downgrade_to_ask"; reason: string }
   | { type: "refine.fallback"; message: string; action: "ask" | "upgrade_to_deep" }
+  | { type: "safety.ok"; flags: string[] }
   | { type: "safety.warn"; level: "low" | "medium"; message: string }
   | { type: "safety.crisis"; severity: "medium" | "high"; message: string; hotlines: Array<{ name: string; phone: string; region: string }> }
   | { type: "safety.block"; reason: string; user_message: string }
