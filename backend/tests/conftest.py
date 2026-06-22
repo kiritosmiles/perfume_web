@@ -16,8 +16,10 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _reset_pg_pool():
-    """Reset PG pool global at start of each test (before event loop is created)."""
+    """Reset PG pool and Redis client globals at start of each test."""
     import app.core.pg as pg_module
+    import app.core.redis as redis_module
 
-    pg_module._pool = None  # Leak old pool but get a fresh one per test
+    pg_module._pool = None
+    redis_module._client = None  # prevent cross-loop async redis errors
     yield

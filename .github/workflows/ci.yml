@@ -15,6 +15,30 @@ jobs:
       run:
         working-directory: backend
 
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_USER: perfume
+          POSTGRES_PASSWORD: perfume_dev
+          POSTGRES_DB: perfume
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -28,8 +52,24 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-interaction --no-root
 
+      - name: Run DB migration
+        run: poetry run alembic upgrade head
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: perfume
+          DB_PASSWORD: perfume_dev
+          DB_NAME: perfume
+
       - name: Run tests (unit)
         run: poetry run pytest tests/ -v -m "not e2e"
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: perfume
+          DB_PASSWORD: perfume_dev
+          DB_NAME: perfume
+          REDIS_URL: redis://localhost:6379
 
   frontend:
     name: Frontend — typecheck + vitest

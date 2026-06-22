@@ -2,7 +2,7 @@ import type { EmotionResult, RecommendationSkeleton } from "../types";
 
 export type SSEEvent =
   | { type: "chat.ack"; message_id: string; server_ts: string }
-  | { type: "chat.emotion"; emotion_vector: Record<string, number>; primary_emotion: string; confidence: number; source: EmotionResult["source"] }
+  | { type: "chat.emotion"; emotion_vector: Record<string, number>; primary_emotion: string; confidence: number; source: EmotionResult["source"]; synesthesia_tokens?: string[] }
   | { type: "chat.recall"; generation_id: string; complexity: "simple" | "hybrid" | "complex"; recalled_count: number; memory_sources: ("l1" | "l2" | "l3")[]; latency_ms: number }
   | { type: "gen.start"; generation_id: string; mode: "fast" | "deep" }
   | { type: "gen.skeleton"; generation_id: string; recommendations: RecommendationSkeleton[]; is_partial: true; memory_context?: string }
@@ -22,9 +22,9 @@ export type SSEEvent =
   | { type: "safety.ok"; flags: string[] }
   | { type: "safety.warn"; level: "low" | "medium"; message: string }
   | { type: "safety.crisis"; severity: "medium" | "high"; message: string; hotlines: Array<{ name: string; phone: string; region: string }> }
-  | { type: "safety.block"; reason: string; user_message: string }
+  | { type: "safety.block"; reason: "overstep" | "injection" | "hostile"; user_message: string }
   | { type: "lifecycle.session"; status: "active" | "idle_timeout" | "completed"; session_id: string }
   | { type: "lifecycle.resume"; generation_id: string; from_phase: string; already_streamed_count: number }
   | { type: "system.heartbeat"; ts: string }
-  | { type: "system.notification"; kind: string; message: string; action_link?: string }
+  | { type: "system.notification"; kind: "perfumer_update" | "mood_journal_ready"; message: string; action_link?: string }
   | { type: "system.error"; code: string; user_message: string; retryable: boolean };

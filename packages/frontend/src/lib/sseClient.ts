@@ -21,7 +21,7 @@ export function createSSEConnection(
     "gen.complete", "gen.error",
     "gate.check", "gate.ask", "gate.wait",
     "refine.start", "refine.result", "refine.gate", "refine.fallback",
-    "safety.warn", "safety.crisis", "safety.block",
+    "safety.ok", "safety.warn", "safety.crisis", "safety.block",
     "lifecycle.session", "lifecycle.resume",
     "system.heartbeat", "system.notification", "system.error",
   ];

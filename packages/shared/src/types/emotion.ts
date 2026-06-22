@@ -12,6 +12,7 @@ export interface EmotionResult {
   primary_emotion: string;
   confidence: number;
   source: "card_preset" | "bert" | "llm_fallback" | "llm_text";
+  synesthesia_tokens?: string[];
 }
 
 export interface SceneTag {

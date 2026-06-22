@@ -1,6 +1,13 @@
 CRISIS_KEYWORDS = [
+    # High severity — immediate block
     "自杀", "自残", "不想活", "想死", "活不下去",
     "伤害自己", "伤害别人", "结束生命", "轻生",
+    "没有意义了", "想消失", "离开这个世界", "死了算了",
+    "活着好累", "活够了", "不想活了", "寻死",
+    "割腕", "跳楼", "上吊", "安眠药",
+    # Medium severity — warn but don't block
+    "想不开", "绝望", "撑不下去了",
+    "没人需要我", "崩溃", "撑不住",
 ]
 
 CRISIS_HOTLINES: list[dict] = [
@@ -27,7 +34,11 @@ def crisis_check(text: str) -> dict:
         }
 
     # Severity by keyword count or specific high-risk keywords
-    high_risk = {"自杀", "自残", "想死", "轻生", "结束生命"}
+    high_risk = {
+        "自杀", "自残", "想死", "轻生", "结束生命",
+        "割腕", "跳楼", "上吊", "安眠药", "寻死",
+        "死了算了", "离开这个世界", "活够了", "不想活了",
+    }
     severity = "high" if any(kw in high_risk for kw in matched) else "medium"
 
     return {

@@ -52,9 +52,9 @@ class TestSafetyService:
         assert len(result["matched_keywords"]) >= 2
 
     def test_medium_severity_keyword(self):
-        result = crisis_check("我不想活了")
+        result = crisis_check("我最近撑不下去了")
         assert result["is_crisis"] is True
-        # "不想活" is not in high_risk set
+        # "撑不下去了" is not in high_risk set
         assert result["severity"] == "medium"
 
     def test_crisis_includes_hotlines(self):

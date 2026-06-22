@@ -4,7 +4,7 @@ import hashlib
 import logging
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.core.auth import (
     hash_password, verify_password, create_access_token,
@@ -12,6 +12,7 @@ from app.core.auth import (
 )
 from app.core.deps import get_current_user
 from app.core.pg import get_pg_pool
+from app.core.ratelimit import check_rate_limit
 from app.models.auth import RegisterInput, LoginInput, RefreshInput
 
 logger = logging.getLogger(__name__)
@@ -27,7 +28,8 @@ def _user_response(row) -> dict:
 
 
 @router.post("/auth/register")
-async def register(input_data: RegisterInput):
+async def register(input_data: RegisterInput, request: Request):
+    await check_rate_limit(request)
     pool = await get_pg_pool()
     async with pool.acquire() as conn:
         existing = await conn.fetchrow("SELECT id FROM users WHERE email = $1", input_data.email)
@@ -79,7 +81,8 @@ async def register(input_data: RegisterInput):
 
 
 @router.post("/auth/login")
-async def login(input_data: LoginInput):
+async def login(input_data: LoginInput, request: Request):
+    await check_rate_limit(request)
     pool = await get_pg_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow("SELECT id, email, password_hash, created_at FROM users WHERE email = $1", input_data.email)

@@ -23,7 +23,24 @@ async def check_rate_limit(request: Request) -> None:
 
     Returns (allowed: bool, retry_after: int).
     """
-    pass  # exported for explicit use
+    r = _get_client()
+    if r is None:
+        return  # Redis unavailable → allow
+
+    ip = request.client.host if request.client else "127.0.0.1"
+    limit = WL_POST if request.method == "POST" else WL_GET
+    now = int(time.time())
+    window_key = f"rate:{ip}:{now // WINDOW}"
+
+    count = await r.incr(window_key)
+    if count == 1:
+        await r.expire(window_key, WINDOW + 5)
+    if count > limit:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests. Please wait a minute.",
+        )
 
 
 async def rate_limit_guest(request: Request) -> bool:

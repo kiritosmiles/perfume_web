@@ -181,20 +181,28 @@ async def sse_event_stream(
     # 0) Safety check for text input
     if input_data.user_text and input_data.user_text.strip():
         check = crisis_check(input_data.user_text)
-        if check["is_crisis"] and check["severity"] == "high":
-            yield sse("safety.crisis", {
-                "severity": "high",
-                "message": "我们检测到你可能需要专业帮助。以下热线可以提供支持：",
-                "hotlines": check.get("hotlines", []),
-            })
-            yield sse("safety.block", {
-                "reason": "crisis_content",
-                "user_message": "请拨打心理援助热线寻求专业帮助。",
-            })
-            hb_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await hb_task
-            return
+        if check["is_crisis"]:
+            if check["severity"] == "high":
+                yield sse("safety.crisis", {
+                    "severity": "high",
+                    "message": "我们检测到你可能需要专业帮助。以下热线可以提供支持：",
+                    "hotlines": check.get("hotlines", []),
+                })
+                yield sse("safety.block", {
+                    "reason": "hostile",
+                    "user_message": "消息已发送",
+                })
+                hb_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await hb_task
+                return
+            elif check["severity"] == "medium":
+                yield sse("safety.warn", {
+                    "level": "medium",
+                    "message": "我注意到一些让我担心的内容，但我会继续为你服务。",
+                })
+        else:
+            yield sse("safety.ok", {"flags": []})
 
     # 1) chat.ack
     yield sse("chat.ack", {
@@ -236,6 +244,7 @@ async def sse_event_stream(
         "primary_emotion": emotion_result["primary_emotion"],
         "confidence": emotion_result["confidence"],
         "source": emotion_result["source"],
+        "synesthesia_tokens": [],
     })
 
     # Persist user message for Phase 2 registration migration (guest only)

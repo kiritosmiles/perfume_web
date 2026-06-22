@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 
 from app.core.deps import get_current_user
 from app.core.quota import check_free_quota, consume_free_quota, get_remaining_quota
+from app.core.ratelimit import check_rate_limit
 from app.models.guest import GuestSessionInput
 from app.sse.protocol import sse
 from app.sse.stream import sse_event_stream
@@ -39,8 +40,10 @@ def _sse_headers() -> dict[str, str]:
 @router.post("/recommend/sessions")
 async def start_auth_session(
     input_data: GuestSessionInput,
+    request: Request,
     current_user: dict = Depends(get_current_user),
 ):
+    await check_rate_limit(request)
     user_id = current_user["id"]
     if not await check_free_quota(user_id, "sessions"):
         return StreamingResponse(
@@ -58,11 +61,13 @@ async def start_auth_session(
 
 @router.get("/recommend/sessions")
 async def start_auth_session_get(
+    request: Request,
     card_ids: str = Query(default=""),
     scene: str = Query(default=""),
     text: str = Query(default=""),
     current_user: dict = Depends(get_current_user),
 ):
+    await check_rate_limit(request)
     user_id = current_user["id"]
     if not await check_free_quota(user_id, "sessions"):
         return StreamingResponse(

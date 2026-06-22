@@ -73,7 +73,14 @@ async def start_guest_session(input_data: GuestSessionInput, request: Request):
     if not await rate_limit_guest(request):
         return JSONResponse(
             status_code=429,
-            content={"detail": "Too many requests. Please wait a minute."},
+            content={
+                "error": {
+                    "code": "RATE_LIMITED",
+                    "message": "请求过于频繁，请稍后再试。",
+                    "retryable": True,
+                    "details": {"retry_after_seconds": 60},
+                }
+            },
             headers={"Retry-After": "60"},
         )
 
@@ -104,7 +111,14 @@ async def start_guest_session_get(
     if not await rate_limit_guest(request):
         return JSONResponse(
             status_code=429,
-            content={"detail": "Too many requests. Please wait a minute."},
+            content={
+                "error": {
+                    "code": "RATE_LIMITED",
+                    "message": "请求过于频繁，请稍后再试。",
+                    "retryable": True,
+                    "details": {"retry_after_seconds": 60},
+                }
+            },
             headers={"Retry-After": "60"},
         )
 
