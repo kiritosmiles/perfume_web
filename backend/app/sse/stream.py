@@ -17,6 +17,7 @@ from app.services.generation import build_skeleton, build_copy_stream
 from app.services.llm import generate_copy_for_perfume
 from app.services.llm_emotion import resolve_emotion_from_text
 from app.services.safety import crisis_check
+from app.services.memory import trigger_l1_consolidation
 from app.sse.protocol import sse, now_iso
 
 logger = logging.getLogger(__name__)
@@ -126,9 +127,11 @@ async def _resolve_emotion(
 
 async def sse_event_stream(
     input_data: GuestSessionInput,
+    session_id: str | None = None,
 ) -> AsyncGenerator[str, None]:
     generation_id = str(uuid.uuid4())
     message_id = str(uuid.uuid4())
+    sid = session_id or str(uuid.uuid4())
 
     # Look up user-provided LLM key (if any)
     user_api_key: str | None = None
@@ -312,6 +315,18 @@ async def sse_event_stream(
                 })
                 await asyncio.sleep(0)
 
+    # ── L1 Evidence Write (sync, <2ms) ──────────────────────────────────
+    user_msg = input_data.user_text or ",".join(input_data.emotion_card_ids) if not input_data.user_text else input_data.user_text
+    agent_msg = "\n".join(
+        f"推荐{s['rank']}: {s['name']} by {s.get('brand','')}" for s in skeletons
+    )
+    if user_msg or agent_msg:
+        try:
+            from app.core.redis import write_l1_evidence as _w
+            await _w(sid, 1, user_msg or "", agent_msg, emotion_result["emotion_vector"])
+        except Exception:
+            logger.warning("L1 evidence write failed", exc_info=True)
+
     # Persist agent response for Phase 2 registration migration
     if input_data.browser_id:
         await _log_guest_agent_message(
@@ -324,3 +339,10 @@ async def sse_event_stream(
         "total_cards": len(skeletons),
         "metadata": {"mode": "fast", "emotion": emotion_result["primary_emotion"]},
     })
+
+    # ── L1 Async Consolidation (fire-and-forget, ~500ms) ─────────────────
+    if user_msg or agent_msg:
+        import asyncio as _asyncio
+        _asyncio.create_task(
+            trigger_l1_consolidation(sid, 1, user_msg or "", agent_msg, [])
+        )
