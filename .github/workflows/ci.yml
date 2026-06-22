@@ -123,6 +123,19 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      neo4j:
+        image: neo4j:2025-community
+        env:
+          NEO4J_AUTH: neo4j/perfume_dev
+        ports:
+          - 7474:7474
+          - 7687:7687
+        options: >-
+          --health-cmd "echo 'RETURN 1;' | cypher-shell -u neo4j -p perfume_dev 2>/dev/null || exit 1"
+          --health-interval 15s
+          --health-timeout 20s
+          --health-retries 10
+          --health-start-period 60s
     defaults:
       run:
         working-directory: packages/frontend
@@ -195,6 +208,7 @@ jobs:
       - name: Run Playwright tests
         run: npx playwright test
         env:
+          NEO4J_URI: bolt://localhost:7687
           TEST_SHARE_ID: ${{ env.TEST_SHARE_ID }}
 
       - name: Upload screenshots on failure
