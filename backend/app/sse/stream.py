@@ -18,6 +18,7 @@ from app.services.llm import generate_copy_for_perfume
 from app.services.llm_emotion import resolve_emotion_from_text
 from app.services.safety import crisis_check
 from app.services.memory import trigger_l1_consolidation
+from app.core.recall import recall_pipeline
 from app.sse.protocol import sse, now_iso
 
 logger = logging.getLogger(__name__)
@@ -216,6 +217,26 @@ async def sse_event_stream(
 
     await asyncio.sleep(0)
 
+    # ── 2.5) chat.recall — Complexity-aware memory recall (~510ms)
+    owner_type = "guest"
+    owner_id = input_data.browser_id or ""
+    if not owner_id:
+        owner_id = sid  # fallback to session_id
+    recall_result = await recall_pipeline(
+        user_text=input_data.user_text or "",
+        emotion_result=emotion_result,
+        owner_type=owner_type,
+        owner_id=owner_id,
+        session_id=sid,
+    )
+    yield sse("chat.recall", {
+        "generation_id": generation_id,
+        "complexity": recall_result["complexity"],
+        "recalled_count": len(recall_result["memories"]),
+        "memory_sources": recall_result.get("sources", []),
+        "latency_ms": recall_result["latency_ms"],
+    })
+
     # 3) gen.start
     yield sse("gen.start", {
         "generation_id": generation_id,
@@ -271,6 +292,7 @@ async def sse_event_stream(
         "generation_id": generation_id,
         "recommendations": skeletons,
         "is_partial": True,
+        "memory_context": recall_result.get("context_text", ""),
     })
 
     await asyncio.sleep(0)

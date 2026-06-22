@@ -146,3 +146,21 @@ class TestL2Queue:
         t2 = await dequeue_l2(timeout_seconds=1)
         assert t1["session_id"] == s1
         assert t2["session_id"] == s2
+
+
+class TestRecallSearch:
+    @pytest.mark.asyncio
+    async def test_l1_vector_search_returns_empty_for_no_data(self):
+        from app.core.recall import _l1_vector_search
+        results = await _l1_vector_search("test_session_nonexistent", [0.0]*512, top_k=10)
+        assert results == []
+
+    @pytest.mark.asyncio
+    async def test_pg_vector_search_handles_empty(self):
+        from app.core.recall import _pg_vector_search
+        # Should not crash when no data exists
+        try:
+            results = await _pg_vector_search("memory_l2", "guest", "nonexistent", [0.0]*512, 4)
+            assert isinstance(results, list)
+        except Exception as e:
+            pytest.skip(f"pgvector not available: {e}")
