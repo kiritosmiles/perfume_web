@@ -15,7 +15,6 @@ sentence-transformers = "^2.7.0"
 pgvector = "^0.3.0"
 pydantic-settings = "^2.6.0"
 httpx = "^0.28.0"
-passlib = {extras = ["bcrypt"], version = "^1.7.4"}
 python-jose = {extras = ["cryptography"], version = "^3.5.0"}
 
 [tool.poetry.group.dev.dependencies]
@@ -25,8 +24,7 @@ sqlalchemy = "^2.0.0"
 alembic = "^1.18.0"
 
 [tool.pytest.ini_options]
-asyncio_default_fixture_loop_scope = "session"
-asyncio_default_test_loop_scope = "session"
+asyncio_default_fixture_loop_scope = "function"
 markers = [
     "e2e: end-to-end tests (require Docker services, run separately from unit tests)",
     "integration: tests requiring Neo4j connectivity",

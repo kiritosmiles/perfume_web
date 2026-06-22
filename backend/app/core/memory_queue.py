@@ -1,4 +1,4 @@
-"""Redis Queue for L2/L3 async consolidation — RPUSH/BRPOP."""
+"""Redis Queue for L2/L3 async consolidation — RPUSH/BLPOP (FIFO)."""
 
 import json as _json
 import logging
@@ -28,7 +28,7 @@ async def dequeue_l2(timeout_seconds: int = 30) -> dict | None:
     r = _get_client()
     if r is None:
         return None
-    result = await r.brpop(L2_QUEUE_KEY, timeout_seconds)
+    result = await r.blpop(L2_QUEUE_KEY, timeout_seconds)
     if result is None:
         return None
     return _json.loads(result[1])

@@ -99,30 +99,21 @@ class TestL1Fragment:
 
 class TestL2Queue:
     @pytest_asyncio.fixture(autouse=True)
-    async def _ensure_redis(self):
+    async def _ensure_redis_clean(self):
+        """Init Redis and remove any L2 data from prior test runs."""
         try:
             from app.core.redis import _get_client, init_redis
             if _get_client() is None:
                 await init_redis()
-            # Verify connection is working (init_redis sets _client before ping)
             client = _get_client()
             if client is not None:
                 await client.ping()
+                # Flush stale L2 queue data from previous runs
+                await client.delete("memory:queue:L2", "memory:queue:L2:dead")
         except Exception:
-            # Reset _client if it's broken (partial init)
             import app.core.redis as _redis_mod
             _redis_mod._client = None
             pytest.skip("Redis not available")
-
-    @pytest_asyncio.fixture(autouse=True)
-    async def _cleanup(self):
-        try:
-            from app.core.redis import _get_client
-            r = _get_client()
-            if r:
-                await r.delete("memory:queue:L2")
-        except Exception:
-            pass
 
     @pytest.mark.asyncio
     async def test_enqueue_dequeue(self):

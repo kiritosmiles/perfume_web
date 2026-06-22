@@ -2,24 +2,26 @@ import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import bcrypt as _bcrypt
 from jose import JWTError, jwt
-from passlib.hash import bcrypt
 
 from app.core.config import settings
 
 ACCESS_TTL = timedelta(hours=1)
 REFRESH_TTL = timedelta(days=7)
 ALGORITHM = "HS256"
+_BCRYPT_ROUNDS = 12
 
 
 def hash_password(password: str) -> str:
     """Hash password with bcrypt (rounds=12). Returns hash string."""
-    return bcrypt.using(rounds=12).hash(password)
+    salt = _bcrypt.gensalt(rounds=_BCRYPT_ROUNDS)
+    return _bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
     """Verify password against bcrypt hash."""
-    return bcrypt.verify(password, password_hash)
+    return _bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
 
 
 def create_access_token(user_id: str) -> str:
