@@ -125,6 +125,16 @@ async def _resolve_emotion(
         return resolve_emotion_from_cards(input_data)
 
 
+async def _enqueue_l2_after_delay(owner_type: str, owner_id: str, session_id: str, delay: float = 3.0) -> None:
+    """Enqueue L2 consolidation after a short delay for gen.complete flush."""
+    await asyncio.sleep(delay)
+    try:
+        from app.core.memory_queue import enqueue_l2 as _e
+        await _e(owner_type, owner_id, session_id)
+    except Exception:
+        logger.warning("L2 enqueue failed session=%s", session_id, exc_info=True)
+
+
 async def sse_event_stream(
     input_data: GuestSessionInput,
     session_id: str | None = None,
@@ -346,3 +356,8 @@ async def sse_event_stream(
         _asyncio.create_task(
             trigger_l1_consolidation(sid, 1, user_msg or "", agent_msg, [])
         )
+
+    # ── L2 enqueue (fire-and-forget, 3s delay for gen.complete flush) ──
+    owner_type = "guest"
+    owner_id = input_data.browser_id or sid
+    asyncio.create_task(_enqueue_l2_after_delay(owner_type, owner_id, sid, 3.0))

@@ -6,6 +6,7 @@ import pytest
 import pytest_asyncio
 
 from app.core.embedding import encode
+from app.core.memory_queue import enqueue_l2, dequeue_l2
 
 
 class TestEmbedding:
@@ -94,3 +95,54 @@ class TestL1Fragment:
         await update_l1_text(sid, 1, "[偏好] 用户喜欢柑橘调")
         texts = await get_l1_texts(sid)
         assert any("[偏好] 用户喜欢柑橘调" in t for t in texts)
+
+
+class TestL2Queue:
+    @pytest_asyncio.fixture(autouse=True)
+    async def _ensure_redis(self):
+        try:
+            from app.core.redis import _get_client, init_redis
+            if _get_client() is None:
+                await init_redis()
+            # Verify connection is working (init_redis sets _client before ping)
+            client = _get_client()
+            if client is not None:
+                await client.ping()
+        except Exception:
+            # Reset _client if it's broken (partial init)
+            import app.core.redis as _redis_mod
+            _redis_mod._client = None
+            pytest.skip("Redis not available")
+
+    @pytest_asyncio.fixture(autouse=True)
+    async def _cleanup(self):
+        try:
+            from app.core.redis import _get_client
+            r = _get_client()
+            if r:
+                await r.delete("memory:queue:L2")
+        except Exception:
+            pass
+
+    @pytest.mark.asyncio
+    async def test_enqueue_dequeue(self):
+        await enqueue_l2("guest", "browser-abc", str(uuid.uuid4()))
+        task = await dequeue_l2(timeout_seconds=1)
+        assert task is not None
+        assert task["owner_type"] == "guest"
+        assert task["owner_id"] == "browser-abc"
+
+    @pytest.mark.asyncio
+    async def test_dequeue_empty_returns_none(self):
+        task = await dequeue_l2(timeout_seconds=1)
+        assert task is None
+
+    @pytest.mark.asyncio
+    async def test_fifo_order(self):
+        s1, s2 = str(uuid.uuid4()), str(uuid.uuid4())
+        await enqueue_l2("guest", "b1", s1)
+        await enqueue_l2("guest", "b2", s2)
+        t1 = await dequeue_l2(timeout_seconds=1)
+        t2 = await dequeue_l2(timeout_seconds=1)
+        assert t1["session_id"] == s1
+        assert t2["session_id"] == s2
