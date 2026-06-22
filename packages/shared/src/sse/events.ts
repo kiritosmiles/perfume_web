@@ -3,8 +3,9 @@ import type { EmotionResult, RecommendationSkeleton } from "../types";
 export type SSEEvent =
   | { type: "chat.ack"; message_id: string; server_ts: string }
   | { type: "chat.emotion"; emotion_vector: Record<string, number>; primary_emotion: string; confidence: number; source: EmotionResult["source"] }
+  | { type: "chat.recall"; generation_id: string; complexity: "simple" | "hybrid" | "complex"; recalled_count: number; memory_sources: ("l1" | "l2" | "l3")[]; latency_ms: number }
   | { type: "gen.start"; generation_id: string; mode: "fast" | "deep" }
-  | { type: "gen.skeleton"; generation_id: string; recommendations: RecommendationSkeleton[]; is_partial: true }
+  | { type: "gen.skeleton"; generation_id: string; recommendations: RecommendationSkeleton[]; is_partial: true; memory_context?: string }
   | { type: "gen.detail"; generation_id: string; rank: number; expanded_fields: Record<string, unknown> }
   | { type: "gen.copy"; generation_id: string; rank: number; copy_text_chunk: string; is_final: boolean }
   | { type: "gen.complete"; generation_id: string; total_cards: number; metadata?: Record<string, unknown> }

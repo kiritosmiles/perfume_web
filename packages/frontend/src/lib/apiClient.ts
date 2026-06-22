@@ -138,3 +138,51 @@ export async function saveLLMKey(input: LLMKeyInput): Promise<{ status: string }
 export async function getLLMKeyStatus(browserId: string): Promise<LLMKeyStatus> {
   return apiGet<LLMKeyStatus>(`/config/llm-key/status?browser_id=${encodeURIComponent(browserId)}`);
 }
+
+export function getBrowserId(): string {
+  const key = "perfume_browser_id";
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
+
+export interface MemoryTimelineItem {
+  level: "L2" | "L3";
+  id: string;
+  text: string;
+  emotion_profile?: Record<string, unknown>;
+  created_at: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface MemoryTimelineResponse {
+  items: MemoryTimelineItem[];
+  stats: { l1_count: number; l2_count: number; l3_count: number };
+  total: number;
+}
+
+export async function getMemoryTimeline(
+  limit = 20,
+  offset = 0,
+  sessionId?: string,
+): Promise<MemoryTimelineResponse> {
+  const params = new URLSearchParams();
+  params.set("limit", String(limit));
+  params.set("offset", String(offset));
+  if (sessionId) params.set("session_id", sessionId);
+
+  const token = localStorage.getItem("access_token");
+  const browserId = getBrowserId();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  else headers["X-Browser-Id"] = browserId;
+
+  const resp = await fetch(`${BASE_URL}/memory/timeline?${params}`, { headers });
+  if (!resp.ok) {
+    throw new ApiClientError("FETCH_ERROR", `Failed to fetch memory timeline: ${resp.status}`, true);
+  }
+  return resp.json();
+}

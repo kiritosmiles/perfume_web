@@ -3,12 +3,14 @@
 Uses redis.asyncio for non-blocking Redis operations from FastAPI async handlers.
 """
 
+import logging
 from typing import Any
 
 import redis.asyncio as aioredis
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
 _client: aioredis.Redis | None = None
 
 
@@ -121,6 +123,69 @@ async def get_llm_key(browser_id: str) -> dict | None:
     if not raw:
         return None
     return json.loads(raw)
+
+
+# ── L1 Memory fragment layer ────────────────────────────────────────────────────
+
+L1_MEMORY_TTL = 86400  # 24h
+
+
+async def write_l1_evidence(
+    session_id: str, round_num: int,
+    user_text: str, agent_text: str,
+    emotion_vector: dict[str, float],
+) -> None:
+    r = _get_client()
+    if r is None:
+        return
+    import json as _json, datetime as _dt
+    await r.hset(f"memory:L1:{session_id}:{round_num}", mapping={
+        "user_text": user_text[:2000],
+        "agent_text": agent_text[:2000],
+        "text": "",
+        "round_num": str(round_num),
+        "emotion_vector": _json.dumps(emotion_vector, ensure_ascii=False),
+        "timestamp": _dt.datetime.now().isoformat(),
+    })
+    await r.expire(f"memory:L1:{session_id}:{round_num}", L1_MEMORY_TTL)
+
+
+async def get_l1_fragments(session_id: str, max_rounds: int = 20) -> list[dict]:
+    r = _get_client()
+    if r is None:
+        return []
+    import json as _json
+    frags = []
+    for rn in range(1, max_rounds + 1):
+        data = await r.hgetall(f"memory:L1:{session_id}:{rn}")
+        if not data:
+            continue
+        try:
+            frags.append({
+                "user_text": data.get("user_text", ""),
+                "agent_text": data.get("agent_text", ""),
+                "text": data.get("text", ""),
+                "round_num": int(data.get("round_num", 0)),
+                "emotion_vector": _json.loads(data.get("emotion_vector", "{}")),
+                "timestamp": data.get("timestamp", ""),
+            })
+        except Exception:
+            logger.debug("L1 fragment parse error session=%s round=%d", session_id, rn, exc_info=True)
+    frags.sort(key=lambda f: f["round_num"])
+    return frags
+
+
+async def update_l1_text(session_id: str, round_num: int, text: str) -> None:
+    r = _get_client()
+    if r is None:
+        return
+    await r.hset(f"memory:L1:{session_id}:{round_num}", "text", text[:2000])
+    await r.expire(f"memory:L1:{session_id}:{round_num}", L1_MEMORY_TTL)
+
+
+async def get_l1_texts(session_id: str) -> list[str]:
+    frags = await get_l1_fragments(session_id)
+    return [f["text"] for f in frags if f.get("text")]
 
 
 # ── Health check ──────────────────────────────────────────────────────────────

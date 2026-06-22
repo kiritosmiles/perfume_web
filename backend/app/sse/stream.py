@@ -17,6 +17,8 @@ from app.services.generation import build_skeleton, build_copy_stream
 from app.services.llm import generate_copy_for_perfume
 from app.services.llm_emotion import resolve_emotion_from_text
 from app.services.safety import crisis_check
+from app.services.memory import trigger_l1_consolidation
+from app.core.recall import recall_pipeline
 from app.sse.protocol import sse, now_iso
 
 logger = logging.getLogger(__name__)
@@ -124,11 +126,23 @@ async def _resolve_emotion(
         return resolve_emotion_from_cards(input_data)
 
 
+async def _enqueue_l2_after_delay(owner_type: str, owner_id: str, session_id: str, delay: float = 3.0) -> None:
+    """Enqueue L2 consolidation after a short delay for gen.complete flush."""
+    await asyncio.sleep(delay)
+    try:
+        from app.core.memory_queue import enqueue_l2 as _e
+        await _e(owner_type, owner_id, session_id)
+    except Exception:
+        logger.warning("L2 enqueue failed session=%s", session_id, exc_info=True)
+
+
 async def sse_event_stream(
     input_data: GuestSessionInput,
+    session_id: str | None = None,
 ) -> AsyncGenerator[str, None]:
     generation_id = str(uuid.uuid4())
     message_id = str(uuid.uuid4())
+    sid = session_id or str(uuid.uuid4())
 
     # Look up user-provided LLM key (if any)
     user_api_key: str | None = None
@@ -203,6 +217,26 @@ async def sse_event_stream(
 
     await asyncio.sleep(0)
 
+    # ── 2.5) chat.recall — Complexity-aware memory recall (~510ms)
+    owner_type = "guest"
+    owner_id = input_data.browser_id or ""
+    if not owner_id:
+        owner_id = sid  # fallback to session_id
+    recall_result = await recall_pipeline(
+        user_text=input_data.user_text or "",
+        emotion_result=emotion_result,
+        owner_type=owner_type,
+        owner_id=owner_id,
+        session_id=sid,
+    )
+    yield sse("chat.recall", {
+        "generation_id": generation_id,
+        "complexity": recall_result["complexity"],
+        "recalled_count": len(recall_result["memories"]),
+        "memory_sources": recall_result.get("sources", []),
+        "latency_ms": recall_result["latency_ms"],
+    })
+
     # 3) gen.start
     yield sse("gen.start", {
         "generation_id": generation_id,
@@ -258,6 +292,7 @@ async def sse_event_stream(
         "generation_id": generation_id,
         "recommendations": skeletons,
         "is_partial": True,
+        "memory_context": recall_result.get("context_text", ""),
     })
 
     await asyncio.sleep(0)
@@ -312,6 +347,18 @@ async def sse_event_stream(
                 })
                 await asyncio.sleep(0)
 
+    # ── L1 Evidence Write (sync, <2ms) ──────────────────────────────────
+    user_msg = input_data.user_text or ",".join(input_data.emotion_card_ids) if not input_data.user_text else input_data.user_text
+    agent_msg = "\n".join(
+        f"推荐{s['rank']}: {s['name']} by {s.get('brand','')}" for s in skeletons
+    )
+    if user_msg or agent_msg:
+        try:
+            from app.core.redis import write_l1_evidence as _w
+            await _w(sid, 1, user_msg or "", agent_msg, emotion_result["emotion_vector"])
+        except Exception:
+            logger.warning("L1 evidence write failed", exc_info=True)
+
     # Persist agent response for Phase 2 registration migration
     if input_data.browser_id:
         await _log_guest_agent_message(
@@ -324,3 +371,15 @@ async def sse_event_stream(
         "total_cards": len(skeletons),
         "metadata": {"mode": "fast", "emotion": emotion_result["primary_emotion"]},
     })
+
+    # ── L1 Async Consolidation (fire-and-forget, ~500ms) ─────────────────
+    if user_msg or agent_msg:
+        import asyncio as _asyncio
+        _asyncio.create_task(
+            trigger_l1_consolidation(sid, 1, user_msg or "", agent_msg, [])
+        )
+
+    # ── L2 enqueue (fire-and-forget, 3s delay for gen.complete flush) ──
+    owner_type = "guest"
+    owner_id = input_data.browser_id or sid
+    asyncio.create_task(_enqueue_l2_after_delay(owner_type, owner_id, sid, 3.0))
