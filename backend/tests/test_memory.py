@@ -164,3 +164,64 @@ class TestRecallSearch:
             assert isinstance(results, list)
         except Exception as e:
             pytest.skip(f"pgvector not available: {e}")
+
+
+class TestMemoryE2E:
+    """End-to-end memory flow tests (requires Redis + PG)."""
+
+    @pytest_asyncio.fixture(autouse=True)
+    async def _ensure_redis(self):
+        try:
+            from app.core.redis import _get_client, init_redis
+            if _get_client() is None:
+                await init_redis()
+            client = _get_client()
+            if client is not None:
+                await client.ping()
+        except Exception:
+            import app.core.redis as _redis_mod
+            _redis_mod._client = None
+            pytest.skip("Redis not available")
+
+    @pytest_asyncio.fixture(autouse=True)
+    async def _cleanup_l2_queue(self):
+        try:
+            from app.core.redis import _get_client
+            r = _get_client()
+            if r:
+                await r.delete("memory:queue:L2")
+        except Exception:
+            pass
+
+    @pytest.mark.asyncio
+    async def test_full_l1_write_read_cycle(self):
+        from app.core.redis import write_l1_evidence, update_l1_text, get_l1_texts
+        sid = str(uuid.uuid4())
+        # Write evidence
+        await write_l1_evidence(sid, 1, "用户喜欢柑橘", "推荐TF橙花油", {"joy": 0.8})
+        await update_l1_text(sid, 1, "[偏好] 用户偏好柑橘调")
+        # Read back
+        texts = await get_l1_texts(sid)
+        assert len(texts) == 1
+        assert "柑橘" in texts[0]
+
+    @pytest.mark.asyncio
+    async def test_l2_enqueue_and_dequeue(self):
+        sid = str(uuid.uuid4())
+        await enqueue_l2("guest", "test-browser", sid)
+        task = await dequeue_l2(timeout_seconds=2)
+        assert task is not None
+        assert task["session_id"] == sid
+        assert task["owner_type"] == "guest"
+
+    @pytest.mark.asyncio
+    async def test_recall_pipeline_no_history(self):
+        """New user with no history should get empty recall."""
+        from app.core.recall import recall_pipeline
+        result = await recall_pipeline(
+            "推荐一款香水", {"primary_emotion": "joy", "emotion_vector": {}},
+            "guest", "nonexistent-browser-xyz",
+        )
+        assert "complexity" in result
+        assert result["memories"] == []  # no history
+        assert result["latency_ms"] >= 0

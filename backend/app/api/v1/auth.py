@@ -51,6 +51,18 @@ async def register(input_data: RegisterInput):
             except Exception:
                 logger.warning("Guest data migration failed for browser_id=%s", input_data.browser_id)
 
+            # Migrate memory data from browser_id to user_id
+            if input_data.browser_id:
+                try:
+                    await conn.execute(
+                        "UPDATE memory_l2 SET user_id=$1::uuid, browser_id=NULL WHERE browser_id=$2 AND user_id IS NULL",
+                        user_id, input_data.browser_id)
+                    await conn.execute(
+                        "UPDATE memory_l3 SET user_id=$1::uuid, browser_id=NULL WHERE browser_id=$2 AND user_id IS NULL",
+                        user_id, input_data.browser_id)
+                except Exception:
+                    logger.warning("Memory migration failed for browser_id=%s", input_data.browser_id)
+
         access = create_access_token(user_id)
         refresh_raw, refresh_hash = create_refresh_token(user_id)
         expires = datetime.now(timezone.utc) + timedelta(days=7)
