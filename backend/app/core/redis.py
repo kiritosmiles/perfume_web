@@ -3,12 +3,14 @@
 Uses redis.asyncio for non-blocking Redis operations from FastAPI async handlers.
 """
 
+import logging
 from typing import Any
 
 import redis.asyncio as aioredis
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
 _client: aioredis.Redis | None = None
 
 
@@ -168,7 +170,7 @@ async def get_l1_fragments(session_id: str, max_rounds: int = 20) -> list[dict]:
                 "timestamp": data.get("timestamp", ""),
             })
         except Exception:
-            pass
+            logger.debug("L1 fragment parse error session=%s round=%d", session_id, rn, exc_info=True)
     frags.sort(key=lambda f: f["round_num"])
     return frags
 
@@ -178,6 +180,7 @@ async def update_l1_text(session_id: str, round_num: int, text: str) -> None:
     if r is None:
         return
     await r.hset(f"memory:L1:{session_id}:{round_num}", "text", text[:2000])
+    await r.expire(f"memory:L1:{session_id}:{round_num}", L1_MEMORY_TTL)
 
 
 async def get_l1_texts(session_id: str) -> list[str]:
