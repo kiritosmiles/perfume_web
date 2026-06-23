@@ -1,10 +1,14 @@
 import { motion, AnimatePresence } from "framer-motion";
 
+const LOW_CONFIDENCE_THRESHOLD = 0.85;
+
 interface EmotionConfirmationProps {
   visible: boolean;
   primaryEmotion: string;
   confidence: number;
   onCorrect?: () => void;
+  onConfirm?: () => void;
+  onClarify?: () => void;
 }
 
 export function EmotionConfirmation({
@@ -12,7 +16,11 @@ export function EmotionConfirmation({
   primaryEmotion,
   confidence,
   onCorrect,
+  onConfirm,
+  onClarify,
 }: EmotionConfirmationProps) {
+  const isLowConfidence = confidence < LOW_CONFIDENCE_THRESHOLD;
+
   return (
     <AnimatePresence>
       {visible && (
@@ -31,15 +39,50 @@ export function EmotionConfirmation({
           <div className="mt-2 flex items-center justify-center gap-2">
             <div className="h-1.5 bg-stone-200 rounded-full w-24 overflow-hidden">
               <div
-                className="h-full bg-stone-600 rounded-full transition-all duration-500"
+                className={`h-full rounded-full transition-all duration-500 ${isLowConfidence ? "bg-amber-500" : "bg-stone-600"}`}
                 style={{ width: `${Math.round(confidence * 100)}%` }}
               />
             </div>
-            <span className="text-xs text-stone-400">
+            <span
+              className={`text-xs ${isLowConfidence ? "text-amber-600 font-medium" : "text-stone-400"}`}
+            >
               {Math.round(confidence * 100)}%
             </span>
           </div>
-          {onCorrect && (
+
+          {/* Low-confidence follow-up */}
+          {isLowConfidence && (onConfirm || onClarify) && (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs text-stone-500">
+                Your emotion seems mixed — is this accurate?
+              </p>
+              <div className="flex items-center justify-center gap-2">
+                {onConfirm && (
+                  <button
+                    onClick={onConfirm}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full
+                               bg-stone-700 text-white text-xs font-medium
+                               hover:bg-stone-800 transition-colors"
+                  >
+                    ✓ Yes, that's right
+                  </button>
+                )}
+                {onClarify && (
+                  <button
+                    onClick={onClarify}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full
+                               bg-stone-200/70 text-stone-600 text-xs font-medium
+                               hover:bg-stone-300/70 transition-colors"
+                  >
+                    ↩ Let me rephrase
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Non-low-confidence correction link */}
+          {!isLowConfidence && onCorrect && (
             <button
               onClick={onCorrect}
               className="mt-3 text-xs text-stone-400 hover:text-stone-600

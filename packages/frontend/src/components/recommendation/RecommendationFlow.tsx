@@ -271,6 +271,8 @@ export function RecommendationFlow({
               primaryEmotion={emotion.primary_emotion || ""}
               confidence={emotion.confidence || 0}
               onCorrect={handleCorrect}
+              onConfirm={() => {}}
+              onClarify={handleCorrect}
             />
           </div>
         )}
