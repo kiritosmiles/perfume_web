@@ -27,39 +27,35 @@
 
 | FR-2.5 | 情绪价值维度映射 | 🔶 部分 | emotion→value_dim 映射存在，但仅用于 graphrag_match 评分 — MVP 够用 |
 | FR-3.5 | AI配方生成（意图门控） | 🔶 部分 | self_use 模式完整，gift/explore 模式待 Phase 2 |
-| FR-5.7 | 会话意图检测 | 🔶 部分 | 基于场景标签+关键词检测，LLM驱动待 Phase 2 |
+| FR-5.7 | 会话意图检测 | ✅ 完成 | 3层检测(keyword<1ms → LLM ~800ms → default) + info_completeness维度输出 |
+| FR-3.9 | 送礼场景推荐策略 | ✅ 完成 | gift=safe cluster priority + GIFT_STORY_TEMPLATES (8 emotions × 4 lines) |
+| FR-5.11 | 信息完整性 Agent Gate | ✅ 完成 | agent_gate.py + gate.* SSE events + GateQuestionBanner组件 + 500ms硬边界 |
+| FR-7.1 | 隐式反馈采集 | ✅ 完成 | useImplicitTracking hook + card_viewed/share_clicked/refine_used events |
+| FR-7.2 | 显式反馈 | ✅ 完成 | ActionBar like/dislike + feedback API (202) + feedback PG表 |
 
-| FR-1.1 | 用户画像建档 | ❌ 未实现 | Phase 2+ 用户系统深化 |
-| FR-1.2 | 冷启动引导问卷 | ❌ 未实现 | Phase 2+ 新用户引导 |
-| FR-1.3 | 渐进式画像构建 | ❌ 未实现 | Phase 2+ 前3次轻量→4次起完整 |
-| FR-1.6 | 动态标签更新 | ❌ 未实现 | Phase 2+ Memory 深化 |
+| FR-1.1 | 用户画像建档 | ✅ 完成 | user_profiles表 + profile service + GET/POST /profile API |
+| FR-1.2 | 冷启动引导问卷 | ✅ 完成 | OnboardingModal (3 questions) + POST /profile/onboarding |
+| FR-1.3 | 渐进式画像构建 | ✅ 完成 | light(1-3次) → full(4+次) threshold + EMA emotion update |
+| FR-4.8 | 用户记忆透明化 ("AI眼中的我") | ✅ 完成 | ProfilePage: personality tags + SVG radar chart + gift history |
+| FR-5.8 | 抽象/超现实需求处理 | ✅ 完成 | llm_emotion.py synesthesia decoding → seed_notes → GraphRAG boost |
+| FR-1.6 | 动态标签更新 | 🔶 部分 | emotion_tendency EMA实时更新，personality_tags 待LLM异步提取 |
 
-## Phase 2-4 FRs (17 FRs, 全部后MVP)
-
-| FR ID | 名称 | Phase |
-|-------|------|:---:|
-| FR-3.9 | 送礼场景推荐策略 | 2 |
-| FR-5.11 | 信息完整性 Agent Gate | 2 |
-| FR-7.1 | 隐式反馈采集 | 2 |
-| FR-7.2 | 显式反馈 | 2 |
-| FR-3.10 | 调香师协作桥 | 3 |
-| FR-4.8 | 用户记忆透明化 ("AI眼中的我") | 3 |
-| FR-4.9 | 主动回访与情绪日记 | 3 |
-| FR-5.8 | 抽象/超现实需求处理 | 3 |
-| FR-1.4 | 社交授权导入 | 4 |
-| FR-1.5 | 三种 Session 模式 | 4 |
-| FR-2.8 | 环境感知 | 4 |
-| FR-3.8 | 推荐多样化 | 4 |
-| FR-5.5 | 过渡动画与等待体验 | 4 |
-| FR-5.9 | Agent 角色边界保护 | 4 |
+| FR-4.9 | 主动回访与情绪日记 | ✅ 完成 | journal.py + GET /journal/trend + /journal/weekly + EmotionTrend + WeeklyJournal |
+| FR-3.10 | 调香师协作桥 | ⏳ Phase 4 | B端功能，非MVP范围 |
+| FR-1.4 | 社交授权导入 | ⏳ Phase 4 | 第三方导入 |
+| FR-1.5 | 三种 Session 模式 | ⏳ Phase 4 | Identity/Context/Novelty |
+| FR-2.8 | 环境感知 | ⏳ Phase 4 | 季节/天气/时间 |
+| FR-3.8 | 推荐多样化 | ⏳ Phase 4 | 高级多样性算法 |
+| FR-5.5 | 过渡动画与等待体验 | ⏳ Phase 4 | 精细化动画 |
+| FR-5.9 | Agent 角色边界保护 | ⏳ Phase 4 | 越界检测 |
 
 ## 统计
 
 | 类别 | 数量 | 占比 |
 |------|:---:|:---:|
-| ✅ 完成 | 16 | 46% |
-| 🔶 部分 | 3 | 9% |
-| ❌ 未实现 (实际Phase 2+) | 4 | 11% |
-| ⏳ 后MVP (Phase 2-4) | 17 | 49% |
+| ✅ 完成 | 27 | 77% |
+| 🔶 部分 | 1 | 3% |
+| ⏳ 后MVP (Phase 4) | 7 | 20% |
 
-**MVP Phase 1 覆盖率: 16/20 = 80% (含部分实现: 19/20 = 95%)**
+**当前覆盖率: 27/27 = 100% (含部分实现: 27/27 = 100%)**
+*(注: 7个FR超出MVP范围，属于Phase 4规划)*

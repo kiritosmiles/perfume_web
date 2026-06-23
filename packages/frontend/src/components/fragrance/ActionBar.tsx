@@ -1,7 +1,10 @@
+import { useState, useCallback } from "react";
 import { motion } from "framer-motion";
 
 interface ActionBarProps {
   visible: boolean;
+  generationId?: string | null;
+  cardRank?: number;
   onLike?: () => void;
   onShare?: () => void;
   onShuffle?: () => void;
@@ -9,10 +12,23 @@ interface ActionBarProps {
 
 export function ActionBar({
   visible,
+  generationId,
+  cardRank,
   onLike,
   onShare,
   onShuffle,
 }: ActionBarProps) {
+  const [liked, setLiked] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+
+  const handleLike = useCallback(() => {
+    setLiked(true);
+    setShowToast(true);
+    onLike?.();
+    // Auto-hide toast after 2s
+    setTimeout(() => setShowToast(false), 2000);
+  }, [onLike]);
+
   if (!visible) return null;
 
   return (
@@ -21,17 +37,46 @@ export function ActionBar({
       animate={{ opacity: 1, y: 0 }}
       className="flex items-center gap-4 pt-3 border-t border-stone-200/50"
     >
+      {/* Like button */}
       <button
-        onClick={onLike}
-        className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-800 transition-colors"
+        onClick={handleLike}
+        disabled={liked}
+        className={[
+          "flex items-center gap-1.5 text-sm transition-all",
+          liked
+            ? "text-rose-500"
+            : "text-stone-500 hover:text-stone-800",
+        ].join(" ")}
       >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-            d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+        <svg
+          className="w-5 h-5"
+          fill={liked ? "currentColor" : "none"}
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+            d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+          />
         </svg>
-        Like
+        {liked ? "Liked!" : "Like"}
       </button>
 
+      {/* Toast */}
+      {showToast && (
+        <motion.span
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          className="text-xs text-stone-500"
+        >
+          已记录你的偏好
+        </motion.span>
+      )}
+
+      {/* Share button */}
       <button
         onClick={onShare}
         className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-800 transition-colors"
@@ -43,6 +88,7 @@ export function ActionBar({
         Share
       </button>
 
+      {/* Shuffle button */}
       <button
         onClick={onShuffle}
         className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-800 transition-colors ml-auto"

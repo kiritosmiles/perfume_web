@@ -57,7 +57,7 @@ export interface SharePayloadData {
     rank: number;
     name: string;
     brand: string;
-    notes_combination?: string[];
+    notes_combination?: { top?: string[]; middle?: string[]; base?: string[] };
     match_score: number;
     copy_text?: string;
   }>;
@@ -162,6 +162,159 @@ export interface MemoryTimelineResponse {
   items: MemoryTimelineItem[];
   stats: { l1_count: number; l2_count: number; l3_count: number };
   total: number;
+}
+
+// ── Feedback ──────────────────────────────────────────────────────────────────
+
+export interface ExplicitFeedbackInput {
+  generation_id: string;
+  card_rank: number;
+  reaction: "like" | "dislike";
+  reason?: string;
+}
+
+export async function submitFeedback(input: ExplicitFeedbackInput): Promise<void> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "X-Browser-Id": getBrowserId(),
+  };
+  // Add auth token if available
+  const token = localStorage.getItem("access_token");
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  await fetch(`${BASE_URL}/feedback/explicit`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function submitImplicitFeedback(
+  events: Array<{ event_name: string; payload?: Record<string, unknown>; timestamp?: string }>,
+  generationId?: string | null,
+): Promise<void> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "X-Browser-Id": getBrowserId(),
+  };
+  const token = localStorage.getItem("access_token");
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const body: Record<string, unknown> = { events };
+  if (generationId) body.generation_id = generationId;
+
+  await fetch(`${BASE_URL}/feedback/implicit`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+}
+
+// ── Profile ────────────────────────────────────────────────────────────────────
+
+export interface ProfileResponse {
+  user_id: string;
+  profile: Record<string, unknown> | null;
+  conversation_count: number;
+  updated_at: string | null;
+}
+
+export interface OnboardingAnswer {
+  question: number;
+  option: string;
+  mapped_vector: Record<string, number> | null;
+  mapped_tags: string[] | null;
+}
+
+export async function getProfile(): Promise<ProfileResponse> {
+  const token = localStorage.getItem("access_token");
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const resp = await fetch(`${BASE_URL}/profile`, { headers });
+  if (!resp.ok) {
+    throw new ApiClientError("FETCH_ERROR", `Failed to fetch profile: ${resp.status}`, true);
+  }
+  return resp.json();
+}
+
+export async function submitOnboarding(
+  answers: OnboardingAnswer[],
+): Promise<{ user_id: string; profile: Record<string, unknown> }> {
+  const token = localStorage.getItem("access_token");
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const resp = await fetch(`${BASE_URL}/profile/onboarding`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ answers }),
+  });
+  if (!resp.ok) {
+    throw new ApiClientError("FETCH_ERROR", `Failed to submit onboarding: ${resp.status}`, true);
+  }
+  return resp.json();
+}
+
+// ── Journal ────────────────────────────────────────────────────────────────────
+
+export interface EmotionTrendPoint {
+  date: string;
+  primary_emotion: string | null;
+  emotion_scores: Record<string, number>;
+  keywords: string[];
+  summary_text: string;
+}
+
+export interface EmotionTrendResponse {
+  user_id: string;
+  days: number;
+  count: number;
+  data: EmotionTrendPoint[];
+}
+
+export interface WeeklyJournalResponse {
+  user_id: string;
+  week_start: string;
+  week_end: string;
+  this_week: {
+    primary_emotion: string | null;
+    emotion_vector: Record<string, number>;
+    top_keywords: string[];
+    session_count: number;
+    days: Array<{ date: string; primary_emotion: string | null }>;
+  } | null;
+  last_week: {
+    primary_emotion: string | null;
+    emotion_vector: Record<string, number>;
+    top_keywords: string[];
+    session_count: number;
+    days: Array<{ date: string; primary_emotion: string | null }>;
+  } | null;
+  narrative: string;
+}
+
+export async function getEmotionTrend(days = 30): Promise<EmotionTrendResponse> {
+  const token = localStorage.getItem("access_token");
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const resp = await fetch(`${BASE_URL}/journal/trend?days=${days}`, { headers });
+  if (!resp.ok) {
+    throw new ApiClientError("FETCH_ERROR", `Failed to fetch emotion trend: ${resp.status}`, true);
+  }
+  return resp.json();
+}
+
+export async function getWeeklyJournal(weekStart?: string): Promise<WeeklyJournalResponse> {
+  const token = localStorage.getItem("access_token");
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const params = weekStart ? `?week_start=${encodeURIComponent(weekStart)}` : "";
+  const resp = await fetch(`${BASE_URL}/journal/weekly${params}`, { headers });
+  if (!resp.ok) {
+    throw new ApiClientError("FETCH_ERROR", `Failed to fetch weekly journal: ${resp.status}`, true);
+  }
+  return resp.json();
 }
 
 export async function getMemoryTimeline(

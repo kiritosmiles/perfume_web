@@ -7,6 +7,8 @@ interface EmotionState {
   source: "card_preset" | "bert" | "llm_fallback" | "llm_text" | null;
 }
 
+export type SessionIntent = "self_use" | "gift" | "explore";
+
 interface SessionState {
   sessionId: string | null;
   emotion: EmotionState | null;
@@ -19,6 +21,13 @@ interface SessionState {
     memory_sources: string[];
     latency_ms: number;
   } | null;
+  intent: SessionIntent;
+  gate: {
+    verdict: "sufficient" | "partial" | "insufficient" | null;
+    questions: string[] | null;
+    hint: string | null;
+    bypassed: boolean;
+  } | null;
 
   setEmotion: (emotion: {
     emotion_vector: Record<string, number>;
@@ -30,6 +39,8 @@ interface SessionState {
   setAck: (acked: boolean) => void;
   setRecall: (recall: SessionState["recall"]) => void;
   setCrisis: (crisis: SessionState["crisis"]) => void;
+  setIntent: (intent: SessionIntent) => void;
+  setGate: (gate: SessionState["gate"]) => void;
   reset: () => void;
 }
 
@@ -40,6 +51,8 @@ const initialState = {
   crisis: null,
   messageAcked: false,
   recall: null,
+  intent: "self_use" as SessionIntent,
+  gate: null,
 };
 
 export const useSessionStore = create<SessionState>((set) => ({
@@ -62,6 +75,10 @@ export const useSessionStore = create<SessionState>((set) => ({
   setRecall: (recall) => set({ recall }),
 
   setCrisis: (crisis) => set({ crisis }),
+
+  setIntent: (intent) => set({ intent }),
+
+  setGate: (gate) => set({ gate }),
 
   reset: () => set(initialState),
 }));

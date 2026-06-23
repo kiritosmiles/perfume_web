@@ -64,9 +64,9 @@ export function NoteCard({ cards, primaryEmotion, confidence, sceneTag, generati
                 <h3 className="text-base font-semibold text-stone-800 truncate">{card.name}</h3>
                 <span className="text-xs text-stone-400 flex-shrink-0">{card.brand}</span>
               </div>
-              {card.notes_combination && card.notes_combination.length > 0 && (
+              {card.notes_combination && (card.notes_combination.top?.length > 0 || card.notes_combination.middle?.length > 0 || card.notes_combination.base?.length > 0) && (
                 <div className="flex flex-wrap gap-1 mb-2">
-                  {card.notes_combination.slice(0, 6).map((note, i) => (
+                  {[...(card.notes_combination.top ?? []), ...(card.notes_combination.middle ?? []), ...(card.notes_combination.base ?? [])].slice(0, 6).map((note, i) => (
                     <span key={i} className="text-[10px] bg-stone-100 text-stone-600 px-2 py-0.5 rounded-full">
                       {note}
                     </span>

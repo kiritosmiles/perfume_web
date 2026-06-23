@@ -5,7 +5,7 @@ interface SharePayloadData {
     rank: number;
     name: string;
     brand: string;
-    notes_combination?: string[];
+    notes_combination?: { top?: string[]; middle?: string[]; base?: string[] };
     match_score: number;
     copy_text?: string;
   }>;
@@ -40,9 +40,9 @@ export function ShareCard({ payload }: { payload: SharePayloadData }) {
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-stone-800 truncate">{card.name}</h3>
                   <p className="text-xs text-stone-400 mb-2">{card.brand}</p>
-                  {card.notes_combination && card.notes_combination.length > 0 && (
+                  {card.notes_combination && ((card.notes_combination.top?.length ?? 0) > 0 || (card.notes_combination.middle?.length ?? 0) > 0) && (
                     <div className="flex flex-wrap gap-1 mb-2">
-                      {card.notes_combination.slice(0, 4).map((note, i) => (
+                      {[...(card.notes_combination.top ?? []), ...(card.notes_combination.middle ?? []), ...(card.notes_combination.base ?? [])].slice(0, 4).map((note, i) => (
                         <span key={i} className="text-[10px] bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full">{note}</span>
                       ))}
                     </div>

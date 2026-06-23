@@ -36,12 +36,13 @@ export function AuthChatPage() {
     <RecommendationFlow
       variant="auth"
       quotaInfo={quotaInfo}
-      getSSEUrl={({ cardIds, freeText, sceneTag }) => {
+      getSSEUrl={({ cardIds, freeText, sceneTag, intent }) => {
         const params = new URLSearchParams();
         if (cardIds.length > 0) params.set("card_ids", cardIds.join(","));
         else params.set("card_ids", "");
         if (freeText) params.set("text", freeText);
         if (sceneTag) params.set("scene", sceneTag);
+        if (intent && intent !== "self_use") params.set("intent", intent);
         // Pass token as query param for EventSource (cannot send custom headers)
         const at = localStorage.getItem("access_token");
         if (at) params.set("token", at);

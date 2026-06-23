@@ -1,8 +1,14 @@
+export interface NotesPyramid {
+  top: string[];
+  middle: string[];
+  base: string[];
+}
+
 export interface RecommendationSkeleton {
   rank: number;
   name: string;
   brand: string;
-  notes_combination: string[];
+  notes_combination: NotesPyramid;
   match_score: number;
   source: "graphrag_match" | "template_fallback" | "llm_composer";
   allergen_warnings: string[];

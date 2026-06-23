@@ -10,7 +10,7 @@ export type SSEEvent =
   | { type: "gen.copy"; generation_id: string; rank: number; copy_text_chunk: string; is_final: boolean }
   | { type: "gen.complete"; generation_id: string; total_cards: number; metadata?: Record<string, unknown> }
   | { type: "gen.error"; generation_id?: string; code: string; user_message: string; degraded: boolean }
-  | { type: "chat.intent"; intent: string; confidence: number }
+  | { type: "chat.intent"; intent: string; confidence: number; source: string }
   | { type: "chat.error"; code: string; user_message: string; retryable: boolean }
   | { type: "gate.check"; verdict: "sufficient" | "partial" | "insufficient"; latency_ms: number; bypassed: boolean }
   | { type: "gate.ask"; questions: string[]; hint: string }

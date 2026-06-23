@@ -55,6 +55,7 @@ async def search_fragrance_by_emotion(
     emotion_vector: dict[str, float],
     scene_tag: str | None = None,
     limit: int = 50,
+    seed_notes: list[str] | None = None,
 ) -> list[dict]:
     """Search perfumes by weighted multi-emotion→accord→perfume path scoring.
 
@@ -64,7 +65,11 @@ async def search_fragrance_by_emotion(
     (with only 2-3 accords each) drove the entire result set.
 
     Scene tag (if provided) adds a +0.25 bonus for perfumes linked to that
-    scene via SUITS_SEASON, giving the scene selector real influence.
+    scene via SUITS_SEASON.
+
+    Seed notes (if provided, from synesthesia decoding) add a +0.15 bonus
+    per matching note name in the perfume, steering results toward the
+    decoded sensory concepts.
     """
     query = """
         UNWIND $emotions AS ed
@@ -93,7 +98,8 @@ async def search_fragrance_by_emotion(
                COLLECT(DISTINCT ss.season) AS seasons,
                matched_accords[0] AS accord,
                total_accord_score AS accord_score,
-               score
+               score,
+               [(p)-[hn:HAS_NOTE]->(n:Note) | {name: n.name, layer: hn.layer}] AS notes_data
         ORDER BY score DESC
         LIMIT $limit
     """
@@ -113,4 +119,44 @@ async def search_fragrance_by_emotion(
         timeout=3.0,  # 3s hard timeout — TRD §2.2: GraphRAG < 200ms typical
     )
     records = await result.data()
+
+    # Post-process: apply seed note bonus from synesthesia decoding (FR-5.8)
+    if seed_notes and records:
+        records = _apply_seed_note_boost(records, seed_notes)
+
+    return records
+
+
+def _apply_seed_note_boost(
+    records: list[dict],
+    seed_notes: list[str],
+) -> list[dict]:
+    """Boost perfumes whose notes match synesthesia-decoded seed terms.
+
+    Adds +0.15 per matching seed note to the score, then re-sorts.
+    This keeps the Cypher query simple while making synesthesia tokens
+    effective steering signals for GraphRAG results.
+    """
+    seed_lower = [s.lower().strip() for s in seed_notes]
+    for rec in records:
+        notes_data: list[dict] = rec.get("notes_data", []) or []
+        note_names_lower = [(nd.get("name") or "").lower().strip() for nd in notes_data]
+        accords_lower = [(rec.get("accord") or "").lower()]
+
+        matches = 0
+        for seed in seed_lower:
+            for nl in note_names_lower:
+                if seed in nl or nl in seed:
+                    matches += 1
+                    break
+            else:
+                # Also check accord name
+                for al in accords_lower:
+                    if seed in al or al in seed:
+                        matches += 1
+                        break
+
+        rec["score"] = rec.get("score", 0) + matches * 0.15
+
+    records.sort(key=lambda r: r.get("score", 0), reverse=True)
     return records

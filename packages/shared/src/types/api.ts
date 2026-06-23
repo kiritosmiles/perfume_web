@@ -3,6 +3,7 @@ export interface GuestSessionInput {
   scene_tag: string | null;
   browser_id?: string;
   user_text?: string | null;
+  intent?: "self_use" | "gift" | "explore";
 }
 
 export interface ApiError {

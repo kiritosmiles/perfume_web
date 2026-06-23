@@ -15,18 +15,18 @@
 | **Core Value** | No fragrance terminology needed — talk about your mood or pick a card, and AI finds your signature scent |
 | **Target Users** | C-end consumers (shopping for themselves / gifting for others) |
 | **Platform** | Web-first (responsive desktop + mobile), App extension reserved |
-| **Current Phase** | MVP Phase 1 — Recommendation experience loop (Complete ✅) |
+| **Current Phase** | Phase 3 — User profiling (Phase 1 ✅ → Phase 2 ✅ → Phase 3 ✅) |
 
-### MVP Phase 1 Completion Status
+### Overall Status
 
 | Metric | Value |
 |--------|:---:|
-| FR Coverage | **16/20 (80%)** / incl. partial **19/20 (95%)** |
-| Backend Tests | **70 passed**, 0 failed |
+| FR Coverage | **27/27 (100%)** |
+| Backend Tests | **138 passed**, 0 failed |
 | Frontend Tests | **20 passed** |
 | TypeScript | **Zero errors** |
-| SSE Events | **28 defined / 14 emitted** |
-| Perf Benchmarks | **8/8 passed** |
+| SSE Events | **10 domains, 25 events** (chat.* / gen.* / gate.* / safety.* / lifecycle.* / system.*) |
+| API Endpoints | **20 endpoints** (auth 4 + guest 2 + recommend 3 + config 2 + share 2 + memory 1 + feedback 2 + profile 2 + journal 2 + health 1) |
 | Neo4j Knowledge Graph | **1,179 fragrances / 70 accords / 74 emotion→accord edges** |
 | Accord Diversity | **3 recommendations from different accord clusters** (citrus/floral/woody/spicy…) |
 | Perfume Images | **Fragrantica real images** (`primaryImageUrl`, with picsum fallback) |
@@ -205,9 +205,11 @@ The system defines **five roles** spanning C-end consumers, B-end perfumers, and
 │  /api/v1/share/*             (Share links)           │
 │  /api/v1/config/llm-key      (LLM Key management)    │
 │  /api/v1/memory/*            (Memory queries)        │
+│  /api/v1/profile/*           (User profiles)         │
+│  /api/v1/journal/*           (Emotion journal)       │
 │                                                       │
 │  Services: emotion / fragrance / generation / safety / refinement │
-│           memory / recall                              │
+│           memory / recall / profile / journal          │
 │  Middleware: CORS / Trace-Id / RateLimit / Quota       │
 └──┬──────────────┬──────────────┬────────────────────┘
    │              │              │

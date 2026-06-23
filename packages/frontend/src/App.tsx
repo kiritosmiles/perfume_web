@@ -11,6 +11,7 @@ import { RegisterPage } from "./routes/RegisterPage";
 import { AuthChatPage } from "./routes/AuthChatPage";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { MemoryPage } from "./routes/MemoryPage";
+import { ProfilePage } from "./routes/ProfilePage";
 import { useAuthStore } from "./stores/authStore";
 
 export function App() {
@@ -31,6 +32,7 @@ export function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/app" element={<ProtectedRoute><AuthChatPage /></ProtectedRoute>} />
       <Route path="/memory" element={<MemoryPage />} />
+      <Route path="/profile" element={<ProfilePage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );

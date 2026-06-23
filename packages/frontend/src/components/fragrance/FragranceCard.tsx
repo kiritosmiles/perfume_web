@@ -5,6 +5,8 @@ import { NotesCombination } from "./NotesCombination";
 import { ActionBar } from "./ActionBar";
 import { Skeleton } from "../ui/Skeleton";
 import type { FragranceCardUI } from "../../stores/generationStore";
+import { useGenerationStore } from "../../stores/generationStore";
+import { submitFeedback } from "../../lib/apiClient";
 
 interface FragranceCardProps {
   card: FragranceCardUI | null;
@@ -191,7 +193,21 @@ export function FragranceCard({ card, phase, index }: FragranceCardProps) {
         </motion.div>
       )}
 
-      <ActionBar visible={isComplete} />
+      <ActionBar
+        visible={isComplete}
+        generationId={useGenerationStore.getState().generationId}
+        cardRank={card.rank}
+        onLike={() => {
+          const genId = useGenerationStore.getState().generationId;
+          if (genId) {
+            submitFeedback({
+              generation_id: genId,
+              card_rank: card.rank,
+              reaction: "like",
+            });
+          }
+        }}
+      />
     </motion.div>
   );
 }

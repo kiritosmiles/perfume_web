@@ -9,11 +9,14 @@ interface UseSSEOptions {
 
 export function useSSE({ url }: UseSSEOptions) {
   const cleanupRef = useRef<(() => void) | null>(null);
+  const lastUrlRef = useRef<string | null>(null);
   const setEmotion = useSessionStore((s) => s.setEmotion);
   const setSSEStatus = useSessionStore((s) => s.setSSEStatus);
   const setCrisis = useSessionStore((s) => s.setCrisis);
   const setAck = useSessionStore((s) => s.setAck);
   const setRecall = useSessionStore((s) => s.setRecall);
+  const setIntent = useSessionStore((s) => s.setIntent);
+  const setGate = useSessionStore((s) => s.setGate);
 
   const startGeneration = useGenerationStore((s) => s.startGeneration);
   const setSkeleton = useGenerationStore((s) => s.setSkeleton);
@@ -23,7 +26,17 @@ export function useSSE({ url }: UseSSEOptions) {
   const setError = useGenerationStore((s) => s.setError);
 
   useEffect(() => {
-    if (!url) return;
+    // Reset URL tracking when url is cleared (e.g. handleReset)
+    if (!url) {
+      lastUrlRef.current = null;
+      return;
+    }
+
+    // StrictMode dev guard: React 18 double-invokes effects in dev mode.
+    // If we already connected to this exact URL, skip to avoid duplicate
+    // backend calls (emotion resolution, GraphRAG, LLM copy generation).
+    if (lastUrlRef.current === url) return;
+    lastUrlRef.current = url;
 
     // Cleanup previous connection
     if (cleanupRef.current) {
@@ -46,6 +59,38 @@ export function useSSE({ url }: UseSSEOptions) {
 
           case "chat.ack":
             setAck(true);
+            break;
+
+          case "chat.intent":
+            setIntent((data.intent as string) as "self_use" | "gift" | "explore" || "self_use");
+            break;
+
+          case "gate.check":
+            setGate({
+              verdict: (data.verdict as "sufficient" | "partial" | "insufficient"),
+              questions: null,
+              hint: null,
+              bypassed: (data.bypassed as boolean) || false,
+            });
+            break;
+
+          case "gate.ask":
+            setGate({
+              verdict: "insufficient",
+              questions: (data.questions as string[]) || [],
+              hint: (data.hint as string) || null,
+              bypassed: false,
+            });
+            break;
+
+          case "gate.wait":
+            // Keep existing gate state but mark as waiting
+            setGate({
+              verdict: "partial",
+              questions: null,
+              hint: null,
+              bypassed: false,
+            });
             break;
 
           case "chat.recall":
@@ -114,8 +159,15 @@ export function useSSE({ url }: UseSSEOptions) {
     );
 
     cleanupRef.current = cleanup;
-    return cleanup;
-  }, [url, setEmotion, setSSEStatus, setCrisis, startGeneration, setSkeleton, addDetail, addCopyChunk, completeGeneration, setError]);
+    return () => {
+      cleanup();
+      cleanupRef.current = null;
+      // Note: do NOT reset lastUrlRef here — StrictMode dev calls
+      // cleanup-then-remount with the same url; keeping lastUrlRef
+      // prevents the remount from opening a second EventSource.
+    };
+  }, [url, setEmotion, setSSEStatus, setCrisis, setAck, setIntent, setRecall, setGate,
+      startGeneration, setSkeleton, addDetail, addCopyChunk, completeGeneration, setError]);
 
   // Auto-close SSE connection when generation completes or errors
   // Prevents reconnect loop caused by server closing the one-shot stream

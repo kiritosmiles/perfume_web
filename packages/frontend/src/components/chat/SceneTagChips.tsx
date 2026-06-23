@@ -5,8 +5,6 @@ const SCENE_TAGS = [
   { id: "date", emoji: "💑", label: "约会之夜" },
   { id: "home", emoji: "🏠", label: "宅家放松" },
   { id: "party", emoji: "🎊", label: "聚会社交" },
-  { id: "gift", emoji: "🎁", label: "挑选礼物" },
-  { id: "explore", emoji: "🔍", label: "随便看看" },
 ];
 
 interface SceneTagChipsProps {

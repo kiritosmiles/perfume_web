@@ -108,6 +108,8 @@ async def start_guest_session_get(
     text: str = Query(default="", description="Free-text mood description (alternative to card_ids)"),
     allergens: str = Query(default="", description="Comma-separated allergen keywords, e.g. alcohol,linalool"),
     refine: str = Query(default="", description="Refinement keyword for rule-based re-ranking"),
+    gate_answer: str = Query(default="", description="User answer to Agent Gate questions"),
+    intent: str = Query(default="self_use", description="User intent: self_use, gift, explore"),
 ):
     # Rate limit (TRD §6.2: 120 GET/min)
     if not await rate_limit_guest(request):
@@ -129,6 +131,14 @@ async def start_guest_session_get(
     text_val = text.strip() or None
     allergens_list = [a.strip() for a in allergens.split(",") if a.strip()]
     refine_val = refine.strip() or None
+    intent_val = intent.strip()
+    # Guest enforcement: guests only get self_use
+    if intent_val not in ("self_use", "gift", "explore"):
+        intent_val = "self_use"
+    if intent_val != "self_use":
+        logger.info("Guest attempted non-self_use intent=%s, forcing self_use", intent_val)
+        intent_val = "self_use"
+    gate_answer_val = gate_answer.strip() or None
     input_data = GuestSessionInput(
         emotion_card_ids=card_list,
         scene_tag=scene or None,
@@ -136,6 +146,8 @@ async def start_guest_session_get(
         user_text=text_val,
         allergens=allergens_list or None,
         refine=refine_val,
+        gate_answer=gate_answer_val,
+        intent="self_use",  # type: ignore[arg-type]  # always self_use for guests
     )
 
     if browser_id_val:

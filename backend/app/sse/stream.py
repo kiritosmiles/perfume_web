@@ -15,6 +15,7 @@ from app.services.emotion import resolve_emotion_from_cards, EMOTION_LABELS, DIM
 from app.services.fallback import search_fallback_fragrances
 from app.services.fragrance import search_fragrance_by_emotion
 from app.services.generation import build_skeleton, build_copy_stream
+from app.services.intent import detect_intent, is_guest_intent_allowed
 from app.services.llm import generate_copy_for_perfume
 from app.services.llm_emotion import resolve_emotion_from_text
 from app.services.safety import crisis_check, human_handoff_check
@@ -137,6 +138,30 @@ async def _enqueue_l2_after_delay(owner_type: str, owner_id: str, session_id: st
         logger.warning("L2 enqueue failed session=%s", session_id, exc_info=True)
 
 
+async def _update_user_profile(user_id: str, emotion_result: dict) -> None:
+    """Update user profile after generation completes (fire-and-forget).
+
+    Progressive: first 3 conversations only update emotion tendency;
+    conversation 4+ triggers full profile extraction.
+    """
+    try:
+        from app.services.profile import (
+            ensure_profile_exists,
+            increment_conversation_count,
+            update_emotion_tendency,
+            should_extract_full_profile,
+        )
+        await ensure_profile_exists(user_id)
+        count = await increment_conversation_count(user_id)
+        await update_emotion_tendency(user_id, emotion_result["emotion_vector"])
+        if await should_extract_full_profile(user_id):
+            logger.debug("User %s reached full profile threshold (conv=%d)", user_id, count)
+            # Full profile extraction is deferred to cron/scheduler for now;
+            # emotion tendency and conversation count are updated inline.
+    except Exception:
+        logger.warning("Profile update failed for user=%s", user_id, exc_info=True)
+
+
 async def sse_event_stream(
     input_data: GuestSessionInput,
     session_id: str | None = None,
@@ -232,6 +257,23 @@ async def sse_event_stream(
         yield _hb
     await asyncio.sleep(0)  # Yield event loop
 
+    # ── 1.5) chat.intent — 3-layer detection (keyword / LLM / user toggle) ──
+    intent_result = await detect_intent(
+        user_text=input_data.user_text,
+        user_toggle=input_data.intent,
+        api_key_override=user_api_key,
+        base_url_override=user_base_url,
+    )
+    yield sse("chat.intent", {
+        "intent": intent_result["intent"],
+        "confidence": intent_result["confidence"],
+        "source": intent_result.get("source", "default"),
+    })
+
+    for _hb in _drain_heartbeats():
+        yield _hb
+    await asyncio.sleep(0)  # Yield event loop
+
     # 2) chat.emotion — 3-channel resolution (text / cards / dual)
     card_key = ",".join(sorted(input_data.emotion_card_ids))
     has_text = bool(input_data.user_text and input_data.user_text.strip())
@@ -262,7 +304,7 @@ async def sse_event_stream(
         "primary_emotion": emotion_result["primary_emotion"],
         "confidence": emotion_result["confidence"],
         "source": emotion_result["source"],
-        "synesthesia_tokens": [],
+        "synesthesia_tokens": emotion_result.get("synesthesia_tokens", []),
     })
 
     # Persist user message for Phase 2 registration migration (guest only)
@@ -301,6 +343,56 @@ async def sse_event_stream(
         "latency_ms": recall_result["latency_ms"],
     })
 
+    # ── 2.8) Agent Gate: Information Completeness Check (FR-5.11) ──────────
+    # Hard-boundary decision node: sufficient → continue, insufficient → ask user.
+    # Only runs on the first pass (skip if refining or user already answered gate).
+    from app.services.agent_gate import agent_gate_check
+    gate_result = await agent_gate_check(
+        intent=intent_result["intent"],
+        emotion_cn=emotion_result["primary_emotion"],
+        has_scene=bool(input_data.scene_tag),
+        graphrag_candidates=0,  # Not yet searched; updated after GraphRAG below
+        user_text=input_data.user_text,
+        refine_count=1 if input_data.refine else 0,
+        gate_answer=input_data.gate_answer,
+        api_key_override=user_api_key,
+        base_url_override=user_base_url,
+    )
+
+    if gate_result["verdict"] == "insufficient":
+        # Emit gate verdict + questions, then stop — frontend will re-request
+        # with gate_answer when the user responds.
+        yield sse("gate.check", {
+            "verdict": "insufficient",
+            "latency_ms": gate_result["latency_ms"],
+            "bypassed": False,
+        })
+        yield sse("gate.ask", {
+            "questions": gate_result["questions"],
+            "hint": gate_result["hint"],
+        })
+        yield sse("gen.complete", {
+            "generation_id": generation_id,
+            "total_cards": 0,
+            "metadata": {"reason": "gate_insufficient"},
+        })
+        hb_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await hb_task
+        return
+    elif gate_result["verdict"] == "partial":
+        yield sse("gate.wait", {"message": gate_result.get("message", "正在查找相关信息...")})
+
+    yield sse("gate.check", {
+        "verdict": gate_result["verdict"],
+        "latency_ms": gate_result["latency_ms"],
+        "bypassed": gate_result["bypassed"],
+    })
+
+    for _hb in _drain_heartbeats():
+        yield _hb
+    await asyncio.sleep(0)
+
     # 3) gen.start
     yield sse("gen.start", {
         "generation_id": generation_id,
@@ -333,7 +425,8 @@ async def sse_event_stream(
                 neo4j_session,
                 emotion_result["emotion_vector"],
                 input_data.scene_tag,
-                limit=50,  # Fetch more — top scores dominated by duplicate name variants
+                limit=50,
+                seed_notes=emotion_result.get("synesthesia_tokens") or None,
             )
     except (Neo4jError, ServiceUnavailable, SessionExpired, OSError) as e:
         # Neo4j down → degrade to PG fragrance_templates or hardcoded classics
@@ -371,7 +464,10 @@ async def sse_event_stream(
     await asyncio.sleep(0)
 
     # 5) gen.skeleton
-    skeletons = build_skeleton(candidates, emotion_result["emotion_vector"], input_data.allergens)
+    skeletons = build_skeleton(
+        candidates, emotion_result["emotion_vector"], input_data.allergens,
+        intent=intent_result["intent"],
+    )
     yield sse("gen.skeleton", {
         "generation_id": generation_id,
         "recommendations": skeletons,
@@ -407,6 +503,7 @@ async def sse_event_stream(
             sk["name"], sk["brand"],
             emotion_result["primary_emotion"],
             sk.get("notes_combination", []),
+            intent=intent_result["intent"],
             api_key_override=user_api_key,
             base_url_override=user_base_url,
         ):
@@ -426,7 +523,8 @@ async def sse_event_stream(
         else:
             # LLM unavailable → fall back to templates
             copy_chunks = build_copy_stream(
-                sk["rank"], generation_id, emotion_result["primary_emotion"]
+                sk["rank"], generation_id, emotion_result["primary_emotion"],
+                intent=intent_result["intent"],
             )
             for i, chunk in enumerate(copy_chunks):
                 yield sse("gen.copy", {
@@ -475,6 +573,10 @@ async def sse_event_stream(
     _owner_type = "user" if user_id else "guest"
     _owner_id = user_id or input_data.browser_id or sid
     asyncio.create_task(_enqueue_l2_after_delay(_owner_type, _owner_id, sid, 3.0))
+
+    # ── Profile update (fire-and-forget, for authenticated users) ─────────
+    if user_id:
+        asyncio.create_task(_update_user_profile(user_id, emotion_result))
 
     # ── Heartbeat cleanup ──
     hb_task.cancel()

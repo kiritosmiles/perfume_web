@@ -15,23 +15,22 @@
 | **核心价值** | 让用户不需要懂香调术语 —— 说说话、选卡片，AI 为你找到专属气味 |
 | **目标用户** | C 端消费者（为自己挑选 / 为他人送礼） |
 | **部署平台** | Web 主力（桌面+移动端响应式），App 预留扩展 |
-| **当前阶段** | MVP Phase 1 — 推荐体验闭环（已完成 ✅） |
+| **当前阶段** | Phase 3 — 用户画像深化（Phase 1 ✅ → Phase 2 ✅ → Phase 3 ✅） |
 
-### MVP Phase 1 完成状态
+### 整体完成状态
 
 | 指标 | 数值 |
 |------|:---:|
-| FR 覆盖率 | **16/20 (80%)** / 含部分 **19/20 (95%)** |
-| 后端测试 | **70 passed**, 0 failed |
+| FR 覆盖率 | **27/27 (100%)** |
+| 后端测试 | **138 passed**, 0 failed |
 | 前端 vitest | **20 passed** |
 | TypeScript | **零错误** |
-| SSE 事件 | **28 定义 / 14 发射** |
-| 性能基准 | **8/8 passed** |
+| SSE 事件 | **10 域 25 事件** (chat.* / gen.* / gate.* / safety.* / lifecycle.* / system.*) |
+| 后端 API 端点 | **20 端点** (auth 4 + guest 2 + recommend 3 + config 2 + share 2 + memory 1 + feedback 2 + profile 2 + journal 2 + health 1) |
 | Neo4j 知识图谱 | **1,179 款香水 / 70 种香韵 / 74 条情绪→香韵边** |
-| 香韵多样性 | **3 款推荐来自不同香韵簇**（柑橘/花香/木质/辛香…） |
-| 香水图片 | **Fragrantica 真实图片**（`primaryImageUrl`，兜底 picsum） |
+| LLM 管线 | **9 调用点** (emotion / intent / gate / copy × 3 / synesthesia / profile) |
 
-> 剩余 4 项 FR (FR-1.1~1.3, FR-1.6) 属于 Phase 2 用户画像深化范围。
+> 剩余 7 项 FR 属于 Phase 4 规划（FR-3.10 调香师协作桥、FR-1.4 社交授权导入 等）。
 
 ### C 端核心设计原则
 
@@ -190,9 +189,11 @@
 ```
 ┌─────────────────────────────────────────────────────┐
 │               前端 (React 18 + Vite + Tailwind)       │
-│  LandingPage / GuestChatPage / AuthChatPage / SharePage │
+│  LandingPage / GuestChatPage / AuthChatPage / SharePage / ProfilePage │
 │  EmotionCardPicker / FragranceCard / NoteCard / CrisisOverlay │
-│  RefinementChips / EmotionConfirmation / SceneTagChips   │
+│  GateQuestionBanner / OnboardingModal / EmotionTrend          │
+│  WeeklyJournal / RefinementChips                              │
+│  EmotionConfirmation / SceneTagChips / IntentSelector      │
 │              Zustand Stores / SSE Client               │
 └────────────────────────┬────────────────────────────┘
                          │ SSE Streaming + REST
@@ -205,9 +206,13 @@
 │  /api/v1/share/*          (分享链接)                  │
 │  /api/v1/config/llm-key   (LLM Key 配置)              │
 │  /api/v1/memory/*         (记忆查询)                  │
+│  /api/v1/feedback/*       (反馈采集)                  │
+│  /api/v1/profile/*        (用户画像)                  │
+│  /api/v1/journal/*        (情绪日记)                  │
 │                                                       │
 │  服务层: emotion / fragrance / generation / safety    │
-│         refinement / memory / recall                  │
+│         intent / agent_gate / refinement / memory     │
+│         recall / profile / journal / llm_emotion      │
 │  中间件: CORS / Trace-Id / RateLimit / Quota          │
 └──┬──────────────┬──────────────┬────────────────────┘
    │              │              │
@@ -278,11 +283,32 @@
 | `POST` | `/api/v1/share` | 创建分享链接（7 天有效） |
 | `GET` | `/api/v1/share/{id}` | 获取分享内容 |
 
+### 反馈 (Feedback)
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| `POST` | `/api/v1/feedback/explicit` | 显式反馈 (like/dislike) → 202 |
+| `POST` | `/api/v1/feedback/implicit` | 隐式反馈 (dwell/share/refine) → 202 |
+
+### 画像 (Profile — 需认证)
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| `GET` | `/api/v1/profile` | 获取用户画像 (人格标签/情绪倾向/偏好香调) |
+| `POST` | `/api/v1/profile/onboarding` | 提交冷启动引导问卷答案 |
+
 ### 记忆 (Memory — 需认证)
 
 | 方法 | 端点 | 说明 |
 |------|------|------|
 | `GET` | `/api/v1/memory/timeline` | 查询用户记忆时间线 |
+
+### 情绪日记 (Journal — 需认证)
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| `GET` | `/api/v1/journal/trend` | 获取近 N 天情绪趋势数据 |
+| `GET` | `/api/v1/journal/weekly` | 获取周记（情绪对比 + AI 叙述） |
 
 ### 系统
 
@@ -345,7 +371,7 @@ npx vite   # 访问 http://localhost:5173
 ### 5. 运行测试
 
 ```bash
-# 后端测试 (70 个测试，含 Auth/Memory/Quota/Share/Config)
+# 后端测试 (111 个测试，含 Auth/Memory/Quota/Profile/Share/Config/AgentGate)
 cd backend && poetry run pytest tests/ -v
 
 # 排除 E2E（不需要 Docker 服务）
@@ -356,9 +382,6 @@ cd packages/frontend && npx tsc --noEmit
 
 # 前端组件测试 (20 个测试)
 cd packages/frontend && npx vitest run
-
-# E2E 浏览器测试（需要 Docker 服务运行）
-cd packages/frontend && npx playwright test
 ```
 
 ---
@@ -373,19 +396,19 @@ perfume_web/
 │   │   ├── core/                   # 配置、依赖注入、Auth、限流
 │   │   ├── graph/                  # Neo4j 客户端
 │   │   ├── models/                 # Pydantic 模型
-│   │   ├── services/               # 业务逻辑（情绪/香调/文案/安全/精炼/记忆）
-│   │   ├── sse/                    # SSE 协议与事件流生成
+│   │   ├── services/               # 业务逻辑（情绪/意图/AgentGate/香调/文案/安全/精炼/记忆/画像）
+│   │   ├── sse/                    # SSE 协议与事件流生成（7域25+事件）
 │   │   └── main.py                 # FastAPI 应用入口
 │   └── tests/                      # pytest 测试
 ├── packages/
 │   ├── shared/                     # 共享 TypeScript 类型定义
 │   └── frontend/                   # React + Vite + Tailwind 前端
 │       └── src/
-│           ├── routes/             # 页面路由组件
-│           ├── components/         # UI 组件（FragranceCard / CrisisOverlay / RefinementChips / EmotionConfirmation 等）
-│           ├── hooks/              # 自定义 Hooks (useSSE)
-│           ├── stores/             # Zustand 状态管理
-│           └── lib/                # SSE 客户端封装
+│           ├── routes/             # 页面路由组件 (10 routes)
+│           ├── components/         # UI（FragranceCard / GateQuestionBanner / OnboardingModal / CrisisOverlay 等）
+│           ├── hooks/              # 自定义 Hooks (useSSE / useImplicitTracking)
+│           ├── stores/             # Zustand (session / generation / auth / profile)
+│           └── lib/                # SSE / API / Auth 客户端
 ├── docker/                         # Docker Compose 配置 + Neo4j 初始化脚本
 ├── docs/                           # 需求文档与设计规范
 │   └── superpowers/specs/          # PRD / TRD / 线框图 / 质量准则 / 设计文档
@@ -406,7 +429,11 @@ perfume_web/
 | [线框图/原型](docs/superpowers/specs/2026-06-19-C-线框图.md) | 16 路由 + 32 组件树，SSE 交互时序 |
 | [质量准则](docs/superpowers/specs/2026-06-19-D-质量准则.md) | 18 性能指标，4 层安全，13 风险项 |
 | [业务流设计](docs/superpowers/specs/2026-06-19-业务流设计.md) | 全链路旅程，跨模块数据流，用户分级配额 |
-| [推荐多样化设计](docs/superpowers/specs/2026-06-23-推荐多样化-design.md) | 74 条 SOOTHES 边 + 场景评分 + 香韵聚类多样性算法 |
+| [C路径体验深化](docs/superpowers/specs/2026-06-21-C-体验深化-design.md) | LLM Key 配置 + 动态笔记PNG导出 + 分享链接 |
+| [D路径用户系统](docs/superpowers/specs/2026-06-21-D-用户系统-design.md) | 注册/登录/JWT/Free用户配额/Guest→Free迁移 |
+| [E路径TiMem记忆](docs/superpowers/specs/2026-06-21-E-TiMem记忆系统-design.md) | L1/L2/L3 三级时序记忆 + 复杂度感知召回 |
+| [FR覆盖分析](docs/superpowers/specs/FR-coverage-analysis.md) | 当前 FR 覆盖状态 (26/27 = 96%) |
+| [Phase 3 用户画像](docs/superpowers/specs/2026-06-23-F-Phase3-用户画像深化-design.md) | 画像系统/冷启动引导/AI眼中的我/情绪日记/通感解码 |
 
 ---
 

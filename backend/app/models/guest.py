@@ -1,6 +1,8 @@
 from pydantic import BaseModel, model_validator
+from typing import Literal
 
 VALID_CARD_IDS = {"joy", "sadness", "anxiety", "calm", "excitement", "nostalgia", "romance", "melancholy"}
+VALID_INTENTS = {"self_use", "gift", "explore"}
 
 
 class GuestSessionInput(BaseModel):
@@ -10,6 +12,8 @@ class GuestSessionInput(BaseModel):
     user_text: str | None = None
     allergens: list[str] | None = None
     refine: str | None = None
+    gate_answer: str | None = None
+    intent: Literal["self_use", "gift", "explore"] = "self_use"
 
     @model_validator(mode="after")
     def validate_has_input(self):

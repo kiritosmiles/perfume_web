@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { EmotionCardPicker } from "../emotion/EmotionCardPicker";
 import { EmotionConfirmation } from "../emotion/EmotionConfirmation";
 import { SceneTagChips } from "../chat/SceneTagChips";
+import { IntentSelector } from "../chat/IntentSelector";
 import { ChatBody } from "../chat/ChatBody";
 import { ChatInput } from "../chat/ChatInput";
 import { ThinkingIndicator } from "../chat/ThinkingIndicator";
@@ -12,7 +13,9 @@ import { Button } from "../ui/Button";
 import { NetworkStatusBar } from "../ui/NetworkStatusBar";
 import { NoteCard } from "../notes/NoteCard";
 import { ExportButton } from "../notes/ExportButton";
+import { GateQuestionBanner } from "../chat/GateQuestionBanner";
 import { useSSE } from "../../hooks/useSSE";
+import { useImplicitTracking } from "../../hooks/useImplicitTracking";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useGenerationStore } from "../../stores/generationStore";
 import { createShareLink } from "../../lib/apiClient";
@@ -31,6 +34,7 @@ interface RecommendationFlowProps {
     cardIds: string[];
     freeText: string;
     sceneTag: string;
+    intent: "self_use" | "gift" | "explore";
   }) => string | null;
   quotaInfo?: QuotaInfo;
   onQuotaExhausted?: () => void;
@@ -48,6 +52,7 @@ export function RecommendationFlow({
   const [cardIds, setCardIds] = useState<string[]>([]);
   const [freeText, setFreeText] = useState("");
   const [sceneTag, setSceneTag] = useState<string>("");
+  const [intent, setIntent] = useState<"self_use" | "gift" | "explore">("self_use");
   const [sseUrl, setSseUrl] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
@@ -58,9 +63,13 @@ export function RecommendationFlow({
   const generationPhase = useGenerationStore((s) => s.phase);
   const cards = useGenerationStore((s) => s.cards);
   const generationError = useGenerationStore((s) => s.error);
+  const gate = useSessionStore((s) => s.gate);
 
   const navigate = useNavigate();
   const { close } = useSSE({ url: sseUrl });
+
+  // Implicit feedback tracking (dwell, share, refine events)
+  const { track } = useImplicitTracking();
 
   const noteRef = useRef<HTMLDivElement>(null);
   const noteFilename = `perfume-note-${new Date().toISOString().slice(0, 10)}.png`;
@@ -82,7 +91,7 @@ export function RecommendationFlow({
 
   const handleStart = () => {
     if (!canStart) return;
-    const url = getSSEUrl({ cardIds, freeText: freeText.trim(), sceneTag });
+    const url = getSSEUrl({ cardIds, freeText: freeText.trim(), sceneTag, intent });
     if (!url) {
       onQuotaExhausted?.();
       return;
@@ -134,6 +143,7 @@ export function RecommendationFlow({
       const fullUrl = `${window.location.origin}${res.share_url}`;
       setShareUrl(fullUrl);
       await navigator.clipboard.writeText(fullUrl);
+      track("share_clicked", { card_count: cards.length });
     } catch {
       // Share failed silently
     } finally {
@@ -145,12 +155,28 @@ export function RecommendationFlow({
     close();
     setSseUrl(null);
     // Rebuild the same URL but append the refine param
-    const baseUrl = getSSEUrl({ cardIds, freeText: freeText.trim(), sceneTag });
+    const baseUrl = getSSEUrl({ cardIds, freeText: freeText.trim(), sceneTag, intent });
     if (!baseUrl) return;
     const allergens = localStorage.getItem("perfume_allergens") || "";
     let refineUrl = `${baseUrl}&refine=${encodeURIComponent(key)}`;
     if (allergens) refineUrl += `&allergens=${encodeURIComponent(allergens)}`;
+    track("refine_used", { keyword: key });
     setSseUrl(refineUrl);
+  };
+
+  const handleGateAnswer = (answer: string) => {
+    close();
+    setSseUrl(null);
+    const baseUrl = getSSEUrl({ cardIds, freeText: freeText.trim(), sceneTag, intent });
+    if (!baseUrl) return;
+    const allergens = localStorage.getItem("perfume_allergens") || "";
+    let gateUrl = `${baseUrl}&gate_answer=${encodeURIComponent(answer)}`;
+    if (allergens) gateUrl += `&allergens=${encodeURIComponent(allergens)}`;
+    setSseUrl(gateUrl);
+  };
+
+  const handleGateSkip = () => {
+    handleGateAnswer("skip");
   };
 
   const isGenerating =
@@ -201,12 +227,20 @@ export function RecommendationFlow({
               <span className="text-xs text-stone-400 capitalize">{sseStatus}</span>
             </div>
             {onLogout && (
-              <button
-                onClick={onLogout}
-                className="text-xs text-stone-400 hover:text-stone-600 transition-colors"
-              >
-                Logout
-              </button>
+              <>
+                <button
+                  onClick={() => navigate("/profile")}
+                  className="text-xs text-stone-400 hover:text-stone-600 transition-colors"
+                >
+                  Profile
+                </button>
+                <button
+                  onClick={onLogout}
+                  className="text-xs text-stone-400 hover:text-stone-600 transition-colors"
+                >
+                  Logout
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -285,6 +319,19 @@ export function RecommendationFlow({
 
             <div>
               <p className="text-xs text-stone-400 text-center mb-3 font-medium uppercase tracking-wider">
+                Intent
+              </p>
+              <div className="flex justify-center">
+                <IntentSelector
+                  value={intent}
+                  onChange={setIntent}
+                  isGuest={_variant === "guest"}
+                />
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs text-stone-400 text-center mb-3 font-medium uppercase tracking-wider">
                 Optional · Scene
               </p>
               <div className="flex justify-center">
@@ -297,7 +344,19 @@ export function RecommendationFlow({
           </motion.div>
         )}
 
-        {emotion && hasStarted && (
+        {/* Agent Gate: show questions when information is insufficient */}
+        {gate && gate.verdict === "insufficient" && gate.questions && (
+          <div className="max-w-md mx-auto pt-4">
+            <GateQuestionBanner
+              questions={gate.questions}
+              hint={gate.hint || "你可以回答这些问题，或直接说「先推荐看看」"}
+              onSubmit={handleGateAnswer}
+              onSkip={handleGateSkip}
+            />
+          </div>
+        )}
+
+        {emotion && hasStarted && !gate?.questions && (
           <div className="max-w-md mx-auto">
             <EmotionConfirmation
               visible={!!emotion.primary_emotion}

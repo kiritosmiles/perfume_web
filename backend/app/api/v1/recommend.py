@@ -67,6 +67,8 @@ async def start_auth_session_get(
     text: str = Query(default=""),
     allergens: str = Query(default=""),
     refine: str = Query(default=""),
+    gate_answer: str = Query(default=""),
+    intent: str = Query(default="self_use"),
     current_user: dict = Depends(get_current_user),
 ):
     await check_rate_limit(request)
@@ -82,6 +84,8 @@ async def start_auth_session_get(
     text_val = text.strip() or None
     allergens_list = [a.strip() for a in allergens.split(",") if a.strip()]
     refine_val = refine.strip() or None
+    gate_answer_val = gate_answer.strip() or None
+    intent_val = intent.strip() if intent.strip() in ("self_use", "gift", "explore") else "self_use"
     input_data = GuestSessionInput(
         emotion_card_ids=card_list,
         scene_tag=scene or None,
@@ -89,6 +93,8 @@ async def start_auth_session_get(
         user_text=text_val,
         allergens=allergens_list or None,
         refine=refine_val,
+        gate_answer=gate_answer_val,
+        intent=intent_val,  # type: ignore[arg-type]
     )
     return StreamingResponse(
         sse_event_stream(input_data, user_id=user_id),
