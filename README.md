@@ -27,7 +27,9 @@
 | TypeScript | **零错误** |
 | SSE 事件 | **28 定义 / 14 发射** |
 | 性能基准 | **8/8 passed** |
-| Neo4j 知识图谱 | **1,191 款香水** |
+| Neo4j 知识图谱 | **1,179 款香水 / 70 种香韵 / 74 条情绪→香韵边** |
+| 香韵多样性 | **3 款推荐来自不同香韵簇**（柑橘/花香/木质/辛香…） |
+| 香水图片 | **Fragrantica 真实图片**（`primaryImageUrl`，兜底 picsum） |
 
 > 剩余 4 项 FR (FR-1.1~1.3, FR-1.6) 属于 Phase 2 用户画像深化范围。
 
@@ -187,7 +189,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                    前端 (React 18 + Vite + Tailwind)    │
+│               前端 (React 18 + Vite + Tailwind)       │
 │  LandingPage / GuestChatPage / AuthChatPage / SharePage │
 │  EmotionCardPicker / FragranceCard / NoteCard / CrisisOverlay │
 │  RefinementChips / EmotionConfirmation / SceneTagChips   │
@@ -205,7 +207,8 @@
 │  /api/v1/memory/*         (记忆查询)                  │
 │                                                       │
 │  服务层: emotion / fragrance / generation / safety    │
-│  中间件: CORS / Trace-Id / RateLimit                  │
+│         refinement / memory / recall                  │
+│  中间件: CORS / Trace-Id / RateLimit / Quota          │
 └──┬──────────────┬──────────────┬────────────────────┘
    │              │              │
    ▼              ▼              ▼
@@ -214,13 +217,20 @@
 │ pg15    │ │  缓存+   │   │ 图数据库 │
 │+pgvector│ │  速率限制 │   │GraphRAG │
 └──────┘   └──────────┘   └─────────┘
+
+推荐管线:
+  emotion_vector (8维, 全部情绪参与)
+    → 74条 SOOTHES 边 × 场景加权 (+0.25)
+    → GraphRAG 评分 (limit=50)
+    → 香韵聚类贪心多样性 (_diverse_top3)
+    → 3 款推荐 (来自不同香韵簇)
 ```
 
 | 层次 | 技术 | 说明 |
 |------|------|------|
 | 前端 | React 18 + Vite + Tailwind CSS + Zustand | SSE 流式渲染，玻璃拟态设计 |
 | 后端 | Python FastAPI | 异步 SSE 生成器，7 域 22+ 事件协议 |
-| 图数据库 | Neo4j 2025 | 香调知识图谱（香调→香料→香水），1-hop GraphRAG |
+| 图数据库 | Neo4j 2025 | 香调知识图谱（香韵→香水），1-hop GraphRAG，74 条情绪→香韵边，场景加权评分 |
 | 关系数据库 | PostgreSQL 15 + pgvector | 用户/会话/记忆持久化，512 维向量语义检索 |
 | 缓存 | Redis 7 | Layer 1 会话记忆（1+5 滑动窗口）、速率限制、LLM Key 热存储 |
 | LLM | DeepSeek / Claude | 9 调用点约束矩阵，双路径（BERT 快路径 + LLM 兜底） |
@@ -306,8 +316,12 @@ docker compose -f docker/docker-compose.yml up -d
 ### 2. 初始化知识图谱
 
 ```bash
-# 导入 Fragrantica 香调数据到 Neo4j
-python scripts/import_to_neo4j.py
+# 初次导入：将 Fragrantica 香调数据转换为 Neo4j Cypher
+python scripts/import_fragrantica_to_neo4j.py
+
+# 数据迁移（更新已有 Neo4j）
+python scripts/migrate_add_image_to_neo4j.py        # 补充香水图片
+python scripts/migrate_expand_emotion_accords.py    # 扩容情绪→香韵边 (22→74)
 ```
 
 ### 3. 启动后端
@@ -359,7 +373,7 @@ perfume_web/
 │   │   ├── core/                   # 配置、依赖注入、Auth、限流
 │   │   ├── graph/                  # Neo4j 客户端
 │   │   ├── models/                 # Pydantic 模型
-│   │   ├── services/               # 业务逻辑（情绪/香调/文案/安全/精炼）
+│   │   ├── services/               # 业务逻辑（情绪/香调/文案/安全/精炼/记忆）
 │   │   ├── sse/                    # SSE 协议与事件流生成
 │   │   └── main.py                 # FastAPI 应用入口
 │   └── tests/                      # pytest 测试
@@ -368,14 +382,17 @@ perfume_web/
 │   └── frontend/                   # React + Vite + Tailwind 前端
 │       └── src/
 │           ├── routes/             # 页面路由组件
-│           ├── components/         # UI 组件（含 CrisisOverlay / RefinementChips / EmotionConfirmation 等）
+│           ├── components/         # UI 组件（FragranceCard / CrisisOverlay / RefinementChips / EmotionConfirmation 等）
 │           ├── hooks/              # 自定义 Hooks (useSSE)
 │           ├── stores/             # Zustand 状态管理
 │           └── lib/                # SSE 客户端封装
 ├── docker/                         # Docker Compose 配置 + Neo4j 初始化脚本
 ├── docs/                           # 需求文档与设计规范
-│   └── superpowers/specs/          # PRD / TRD / 线框图 / 质量准则
-└── scripts/                        # 数据导入脚本
+│   └── superpowers/specs/          # PRD / TRD / 线框图 / 质量准则 / 设计文档
+└── scripts/                        # 数据导入与迁移脚本
+    ├── import_fragrantica_to_neo4j.py     # 数据集 → Cypher 转换
+    ├── migrate_add_image_to_neo4j.py      # 补充香水真实图片
+    └── migrate_expand_emotion_accords.py  # 扩容情绪→香韵边
 ```
 
 ---
@@ -389,6 +406,7 @@ perfume_web/
 | [线框图/原型](docs/superpowers/specs/2026-06-19-C-线框图.md) | 16 路由 + 32 组件树，SSE 交互时序 |
 | [质量准则](docs/superpowers/specs/2026-06-19-D-质量准则.md) | 18 性能指标，4 层安全，13 风险项 |
 | [业务流设计](docs/superpowers/specs/2026-06-19-业务流设计.md) | 全链路旅程，跨模块数据流，用户分级配额 |
+| [推荐多样化设计](docs/superpowers/specs/2026-06-23-推荐多样化-design.md) | 74 条 SOOTHES 边 + 场景评分 + 香韵聚类多样性算法 |
 
 ---
 

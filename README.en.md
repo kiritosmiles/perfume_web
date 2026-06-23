@@ -27,7 +27,9 @@
 | TypeScript | **Zero errors** |
 | SSE Events | **28 defined / 14 emitted** |
 | Perf Benchmarks | **8/8 passed** |
-| Neo4j Knowledge Graph | **1,191 fragrances** |
+| Neo4j Knowledge Graph | **1,179 fragrances / 70 accords / 74 emotion→accord edges** |
+| Accord Diversity | **3 recommendations from different accord clusters** (citrus/floral/woody/spicy…) |
+| Perfume Images | **Fragrantica real images** (`primaryImageUrl`, with picsum fallback) |
 
 > The 4 remaining FRs (FR-1.1~1.3, FR-1.6) are scoped for Phase 2 user profiling.
 
@@ -205,7 +207,8 @@ The system defines **five roles** spanning C-end consumers, B-end perfumers, and
 │  /api/v1/memory/*            (Memory queries)        │
 │                                                       │
 │  Services: emotion / fragrance / generation / safety / refinement │
-│  Middleware: CORS / Trace-Id / RateLimit              │
+│           memory / recall                              │
+│  Middleware: CORS / Trace-Id / RateLimit / Quota       │
 └──┬──────────────┬──────────────┬────────────────────┘
    │              │              │
    ▼              ▼              ▼
@@ -214,13 +217,20 @@ The system defines **five roles** spanning C-end consumers, B-end perfumers, and
 │ pg15    │ │  Cache + │   │  Graph   │
 │+pgvector│ │ RateLimit │   │ GraphRAG │
 └──────┘   └──────────┘   └─────────┘
+
+Recommendation Pipeline:
+  emotion_vector (8-dim, all emotions participate)
+    → 74 SOOTHES edges × scene boost (+0.25)
+    → GraphRAG scoring (limit=50)
+    → Accord-cluster greedy diversity (_diverse_top3)
+    → 3 recommendations (from different accord clusters)
 ```
 
 | Layer | Technology | Notes |
 |-------|-----------|-------|
 | Frontend | React 18 + Vite + Tailwind CSS + Zustand | SSE streaming rendering, glass morphism UI |
 | Backend | Python FastAPI | Async SSE generator, 7-domain 22+ event protocol |
-| Graph DB | Neo4j 2025 | Fragrance knowledge graph (accords → ingredients → perfumes), 1-hop GraphRAG |
+| Graph DB | Neo4j 2025 | Fragrance knowledge graph (accords → perfumes), 1-hop GraphRAG, 74 emotion→accord edges, scene-weighted scoring |
 | Relational DB | PostgreSQL 15 + pgvector | User/session/memory persistence, 512-dim vector semantic search |
 | Cache | Redis 7 | Layer 1 session memory (1+5 sliding window), rate limiting, LLM Key hot storage |
 | LLM | DeepSeek / Claude | 9-call constraint matrix, dual-path (BERT fast path + LLM fallback) |
@@ -250,8 +260,12 @@ Launches PostgreSQL 15 (pgvector) + Redis 7 + Neo4j 2025, all bound to `127.0.0.
 ### 2. Initialize Knowledge Graph
 
 ```bash
-# Import Fragrantica fragrance data into Neo4j
-python scripts/import_fragrantica_to_neo4j.py --input docs/dataset_fragrantica_*.json
+# First-time import: convert Fragrantica data to Neo4j Cypher
+python scripts/import_fragrantica_to_neo4j.py
+
+# Data migrations (update existing Neo4j)
+python scripts/migrate_add_image_to_neo4j.py        # Add perfume images
+python scripts/migrate_expand_emotion_accords.py    # Expand emotion→accord edges (22→74)
 ```
 
 ### 3. Start Backend
@@ -303,7 +317,7 @@ perfume_web/
 │   │   ├── core/                   # Config, DI, Auth, Rate Limiting
 │   │   ├── graph/                  # Neo4j async client
 │   │   ├── models/                 # Pydantic models
-│   │   ├── services/               # Business logic (emotion/fragrance/copy/safety/refinement)
+│   │   ├── services/               # Business logic (emotion/fragrance/copy/safety/refinement/memory)
 │   │   ├── sse/                    # SSE protocol & event stream generator
 │   │   └── main.py                 # FastAPI app entry point
 │   └── tests/                      # pytest suite
@@ -312,14 +326,17 @@ perfume_web/
 │   └── frontend/                   # React + Vite + Tailwind frontend
 │       └── src/
 │           ├── routes/             # Page route components
-│           ├── components/         # UI components (CrisisOverlay / RefinementChips / EmotionConfirmation etc.)
+│           ├── components/         # UI components (FragranceCard / CrisisOverlay / RefinementChips / EmotionConfirmation etc.)
 │           ├── hooks/              # Custom hooks (useSSE)
 │           ├── stores/             # Zustand state management
 │           └── lib/                # SSE client wrapper
 ├── docker/                         # Docker Compose config + Neo4j init scripts
 ├── docs/                           # Requirements & design specs
-│   └── superpowers/specs/          # PRD / TRD / Wireframe / Quality Standards
-└── scripts/                        # Data import scripts
+│   └── superpowers/specs/          # PRD / TRD / Wireframe / Quality / Design Docs
+└── scripts/                        # Data import & migration scripts
+    ├── import_fragrantica_to_neo4j.py     # Dataset → Cypher converter
+    ├── migrate_add_image_to_neo4j.py      # Add real perfume images
+    └── migrate_expand_emotion_accords.py  # Expand emotion→accord edges
 ```
 
 ---
@@ -333,6 +350,7 @@ perfume_web/
 | [Wireframes](docs/superpowers/specs/2026-06-19-C-线框图.md) | 16 routes + 32 components, SSE interaction timeline |
 | [Quality Standards](docs/superpowers/specs/2026-06-19-D-质量准则.md) | 18 performance metrics, 4-layer security, 13 risk items |
 | [Business Flow Design](docs/superpowers/specs/2026-06-19-业务流设计.md) | Full-link journeys, cross-module data flow, user tier quotas |
+| [Recommendation Diversity Design](docs/superpowers/specs/2026-06-23-推荐多样化-design.md) | 74 SOOTHES edges + scene score + accord-cluster diversity algorithm |
 
 ---
 
