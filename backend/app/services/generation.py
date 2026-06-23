@@ -53,7 +53,19 @@ STORY_TEMPLATES: dict[str, list[str]] = {
 }
 
 
-def build_skeleton(candidates: list[dict], emotion_vector: dict[str, float]) -> list[dict]:
+def _check_allergens(notes: list[str], allergens: list[str]) -> list[str]:
+    """Return a list of allergen keywords found (case-insensitive substring match)."""
+    if not allergens:
+        return []
+    search_text = " ".join(n.lower() for n in notes)
+    return [a for a in allergens if a.lower().strip() in search_text]
+
+
+def build_skeleton(
+    candidates: list[dict],
+    emotion_vector: dict[str, float],
+    allergens: list[str] | None = None,
+) -> list[dict]:
     # Normalize scores: Cypher returns raw weighted scores (max ~1.3).
     # Scale relative to the top result so the best match anchors at ~90-95
     # and trailing results show real differentiation.
@@ -84,7 +96,7 @@ def build_skeleton(candidates: list[dict], emotion_vector: dict[str, float]) -> 
             "notes_combination": notes,
             "match_score": score,
             "source": "graphrag_match",
-            "allergen_warnings": [],
+            "allergen_warnings": _check_allergens(notes, allergens or []),
             "is_partial": True,
             "longevity": round(c.get("longevity") or 3.0, 1),
             "sillage": round(c.get("sillage") or 2.5, 1),

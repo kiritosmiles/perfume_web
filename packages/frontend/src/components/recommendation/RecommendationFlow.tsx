@@ -82,7 +82,10 @@ export function RecommendationFlow({
       onQuotaExhausted?.();
       return;
     }
-    setSseUrl(url);
+    // Append allergens from localStorage if configured
+    const allergens = localStorage.getItem("perfume_allergens") || "";
+    const finalUrl = allergens ? `${url}&allergens=${encodeURIComponent(allergens)}` : url;
+    setSseUrl(finalUrl);
   };
 
   const handleReset = () => {

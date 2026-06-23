@@ -46,6 +46,19 @@ export function FragranceCard({ card, phase, index }: FragranceCardProps) {
         <p className="text-sm text-stone-500">{card.brand}</p>
         <ScoreBar score={card.match_score} source={card.source} />
         <NotesCombination notes={card.notes_combination} />
+        {card.allergen_warnings && card.allergen_warnings.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {card.allergen_warnings.map((w) => (
+              <span
+                key={w}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
+                           bg-red-100 text-red-700 border border-red-200"
+              >
+                ⚠ {w}
+              </span>
+            ))}
+          </div>
+        )}
       </motion.div>
     );
   }
@@ -67,6 +80,20 @@ export function FragranceCard({ card, phase, index }: FragranceCardProps) {
 
       <ScoreBar score={card.match_score} source={card.source} />
       <NotesCombination notes={card.notes_combination} />
+
+      {card.allergen_warnings && card.allergen_warnings.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {card.allergen_warnings.map((w) => (
+            <span
+              key={w}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
+                         bg-red-100 text-red-700 border border-red-200"
+            >
+              ⚠ {w}
+            </span>
+          ))}
+        </div>
+      )}
 
       {card.copy_text && (
         <motion.div

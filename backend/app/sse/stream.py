@@ -353,7 +353,7 @@ async def sse_event_stream(
     await asyncio.sleep(0)
 
     # 5) gen.skeleton
-    skeletons = build_skeleton(candidates, emotion_result["emotion_vector"])
+    skeletons = build_skeleton(candidates, emotion_result["emotion_vector"], input_data.allergens)
     yield sse("gen.skeleton", {
         "generation_id": generation_id,
         "recommendations": skeletons,

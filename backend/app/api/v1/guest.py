@@ -106,6 +106,8 @@ async def start_guest_session_get(
     scene: str = Query(default="", description="Scene tag"),
     browser_id: str = Query(default="", description="Browser identifier"),
     text: str = Query(default="", description="Free-text mood description (alternative to card_ids)"),
+    allergens: str = Query(default="", description="Comma-separated allergen keywords, e.g. alcohol,linalool"),
+    refine: str = Query(default="", description="Refinement keyword for rule-based re-ranking"),
 ):
     # Rate limit (TRD §6.2: 120 GET/min)
     if not await rate_limit_guest(request):
@@ -125,11 +127,15 @@ async def start_guest_session_get(
     card_list = [c.strip() for c in card_ids.split(",") if c.strip()]
     browser_id_val = browser_id or None
     text_val = text.strip() or None
+    allergens_list = [a.strip() for a in allergens.split(",") if a.strip()]
+    refine_val = refine.strip() or None
     input_data = GuestSessionInput(
         emotion_card_ids=card_list,
         scene_tag=scene or None,
         browser_id=browser_id_val,
         user_text=text_val,
+        allergens=allergens_list or None,
+        refine=refine_val,
     )
 
     if browser_id_val:

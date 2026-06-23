@@ -65,6 +65,8 @@ async def start_auth_session_get(
     card_ids: str = Query(default=""),
     scene: str = Query(default=""),
     text: str = Query(default=""),
+    allergens: str = Query(default=""),
+    refine: str = Query(default=""),
     current_user: dict = Depends(get_current_user),
 ):
     await check_rate_limit(request)
@@ -78,11 +80,15 @@ async def start_auth_session_get(
     await consume_free_quota(user_id, "sessions")
     card_list = [c.strip() for c in card_ids.split(",") if c.strip()]
     text_val = text.strip() or None
+    allergens_list = [a.strip() for a in allergens.split(",") if a.strip()]
+    refine_val = refine.strip() or None
     input_data = GuestSessionInput(
         emotion_card_ids=card_list,
         scene_tag=scene or None,
         browser_id=None,
         user_text=text_val,
+        allergens=allergens_list or None,
+        refine=refine_val,
     )
     return StreamingResponse(
         sse_event_stream(input_data, user_id=user_id),

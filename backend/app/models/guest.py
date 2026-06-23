@@ -8,6 +8,8 @@ class GuestSessionInput(BaseModel):
     scene_tag: str | None = None
     browser_id: str | None = None
     user_text: str | None = None
+    allergens: list[str] | None = None
+    refine: str | None = None
 
     @model_validator(mode="after")
     def validate_has_input(self):

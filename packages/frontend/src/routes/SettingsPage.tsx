@@ -3,6 +3,8 @@ import { motion } from "framer-motion";
 import { Button } from "../components/ui/Button";
 import { saveLLMKey, getLLMKeyStatus, getBrowserId } from "../lib/apiClient";
 
+const ALLERGENS_STORAGE_KEY = "perfume_allergens";
+
 export function SettingsPage() {
   const browserId = getBrowserId();
 
@@ -11,6 +13,9 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [alreadyConfigured, setAlreadyConfigured] = useState(false);
+  const [allergens, setAllergens] = useState(
+    () => localStorage.getItem(ALLERGENS_STORAGE_KEY) || ""
+  );
 
   useEffect(() => {
     getLLMKeyStatus(browserId).then((r) => setAlreadyConfigured(r.configured));
@@ -120,6 +125,34 @@ export function SettingsPage() {
             You can also set <code className="bg-stone-200 px-1 rounded">LLM_API_KEY</code> in{" "}
             <code className="bg-stone-200 px-1 rounded">backend/.env</code> as the system default.
           </p>
+
+          {/* Allergen Preferences */}
+          <div className="pt-6 border-t border-stone-200 space-y-3">
+            <div>
+              <h2 className="text-lg font-medium text-stone-800">Allergen Preferences</h2>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Enter ingredients you want to avoid, separated by commas.
+                We'll warn you if they appear in our recommendations.
+              </p>
+            </div>
+            <input
+              type="text"
+              value={allergens}
+              onChange={(e) => {
+                setAllergens(e.target.value);
+                localStorage.setItem(ALLERGENS_STORAGE_KEY, e.target.value);
+              }}
+              placeholder="e.g. alcohol, linalool, citral"
+              className="w-full rounded-xl glass-card px-4 py-3 text-sm text-stone-800
+                         placeholder-stone-400 focus:outline-none focus:ring-2
+                         focus:ring-stone-400 transition-shadow"
+            />
+            {allergens.trim() && (
+              <p className="text-xs text-stone-400">
+                Monitoring: {allergens.split(",").filter(Boolean).map((a) => a.trim()).join(", ")}
+              </p>
+            )}
+          </div>
         </motion.div>
       </div>
     </div>
