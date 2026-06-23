@@ -16,6 +16,7 @@ import { useSessionStore } from "../../stores/sessionStore";
 import { useGenerationStore } from "../../stores/generationStore";
 import { createShareLink } from "../../lib/apiClient";
 import { CrisisOverlay } from "../safety/CrisisOverlay";
+import { RefinementChips } from "../refinement/RefinementChips";
 
 export interface QuotaInfo {
   sessions?: { used: number; max: number; remaining: number };
@@ -134,6 +135,18 @@ export function RecommendationFlow({
     } finally {
       setSharing(false);
     }
+  };
+
+  const handleRefine = (key: string) => {
+    close();
+    setSseUrl(null);
+    // Rebuild the same URL but append the refine param
+    const baseUrl = getSSEUrl({ cardIds, freeText: freeText.trim(), sceneTag });
+    if (!baseUrl) return;
+    const allergens = localStorage.getItem("perfume_allergens") || "";
+    let refineUrl = `${baseUrl}&refine=${encodeURIComponent(key)}`;
+    if (allergens) refineUrl += `&allergens=${encodeURIComponent(allergens)}`;
+    setSseUrl(refineUrl);
   };
 
   const isGenerating =
@@ -333,7 +346,10 @@ export function RecommendationFlow({
             Start Exploring
           </Button>
         ) : generationPhase === "complete" ? (
-          <div className="space-y-2 w-full">
+          <div className="space-y-3 w-full">
+            {/* Refinement chips */}
+            <RefinementChips onSelect={handleRefine} />
+
             {shareUrl && (
               <div className="glass-card px-3 py-2 text-center text-xs text-green-700">
                 Link copied! 📋

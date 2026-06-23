@@ -307,6 +307,24 @@ async def sse_event_stream(
         "mode": "fast",
     })
 
+    # ── Refinement: adjust emotion vector based on user refinement keyword ──
+    if input_data.refine:
+        from app.services.refinement import apply_refinement, DIMENSION_NAMES as _DIMS
+        import logging as _logging
+        _logger = _logging.getLogger(__name__)
+        refine_keywords = [k.strip() for k in input_data.refine.split(",") if k.strip()]
+        adjusted_vector = apply_refinement(emotion_result["emotion_vector"], refine_keywords)
+        primary = max(_DIMS, key=lambda d: adjusted_vector[d])
+        from app.services.emotion import EMOTION_LABELS as _LABELS
+        emotion_result = {
+            "emotion_vector": adjusted_vector,
+            "primary_emotion": _LABELS[primary],
+            "confidence": adjusted_vector[primary],
+            "source": "refined",
+        }
+        _logger.debug("Refinement applied: keywords=%s → primary=%s conf=%.2f",
+                       refine_keywords, emotion_result["primary_emotion"], emotion_result["confidence"])
+
     # 4) GraphRAG search (with try/except degrade)
     candidates: list[dict] = []
     try:
