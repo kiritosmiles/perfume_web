@@ -1,3 +1,29 @@
+# ── Human handoff keywords ──────────────────────────────────────────────
+
+HUMAN_HANDOFF_KEYWORDS = [
+    "转人工", "找客服", "人工客服", "联系客服",
+    "真人客服", "转接人工", "找人工", "有人吗",
+    "客服热线", "联系人工",
+]
+
+HUMAN_HANDOFF_MESSAGE = {
+    "message": "如需人工协助，请发送邮件至香水AI团队，我们将尽快回复。",
+    "contact_email": "support@perfume-ai.example.com",
+}
+
+
+def human_handoff_check(text: str) -> dict | None:
+    """Detect explicit human handoff requests. Returns handoff info dict or None."""
+    for kw in HUMAN_HANDOFF_KEYWORDS:
+        if kw in text:
+            return {
+                "is_handoff": True,
+                "matched_keyword": kw,
+                **HUMAN_HANDOFF_MESSAGE,
+            }
+    return None
+
+
 CRISIS_KEYWORDS = [
     # High severity — immediate block
     "自杀", "自残", "不想活", "想死", "活不下去",

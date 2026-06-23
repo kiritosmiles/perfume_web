@@ -100,6 +100,10 @@ export function useSSE({ url }: UseSSEOptions) {
             });
             break;
 
+          case "safety.ok":
+            setCrisis(null);
+            break;
+
           default:
             break;
         }

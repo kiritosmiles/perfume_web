@@ -15,6 +15,7 @@ import { useSSE } from "../../hooks/useSSE";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useGenerationStore } from "../../stores/generationStore";
 import { createShareLink } from "../../lib/apiClient";
+import { CrisisOverlay } from "../safety/CrisisOverlay";
 
 export interface QuotaInfo {
   sessions?: { used: number; max: number; remaining: number };
@@ -49,6 +50,7 @@ export function RecommendationFlow({
 
   const emotion = useSessionStore((s) => s.emotion);
   const sseStatus = useSessionStore((s) => s.sseStatus);
+  const crisis = useSessionStore((s) => s.crisis);
   const generationPhase = useGenerationStore((s) => s.phase);
   const cards = useGenerationStore((s) => s.cards);
   const generationError = useGenerationStore((s) => s.error);
@@ -149,6 +151,14 @@ export function RecommendationFlow({
     <div className="min-h-dvh bg-stone-50 flex flex-col">
       {/* Network status bar — thin top strip for connection state */}
       <NetworkStatusBar />
+
+      {/* Crisis overlay — rendered when safety.crisis/safety.block detected */}
+      {crisis?.is_crisis && (
+        <CrisisOverlay
+          severity={crisis.severity}
+          onReset={handleReset}
+        />
+      )}
 
       {/* Nav header */}
       <nav className="glass-nav sticky top-0 z-10">

@@ -17,7 +17,7 @@ from app.services.fragrance import search_fragrance_by_emotion
 from app.services.generation import build_skeleton, build_copy_stream
 from app.services.llm import generate_copy_for_perfume
 from app.services.llm_emotion import resolve_emotion_from_text
-from app.services.safety import crisis_check
+from app.services.safety import crisis_check, human_handoff_check
 from app.services.memory import trigger_l1_consolidation
 from app.core.recall import recall_pipeline
 from app.sse.protocol import sse, now_iso
@@ -180,6 +180,24 @@ async def sse_event_stream(
 
     # 0) Safety check for text input
     if input_data.user_text and input_data.user_text.strip():
+        # Check for explicit human handoff request first
+        handoff = human_handoff_check(input_data.user_text)
+        if handoff:
+            yield sse("system.notification", {
+                "kind": "human_handoff",
+                "message": handoff["message"],
+                "action_link": f"mailto:{handoff['contact_email']}",
+            })
+            yield sse("gen.complete", {
+                "generation_id": "",
+                "total_cards": 0,
+                "metadata": {"reason": "human_handoff_requested"},
+            })
+            hb_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await hb_task
+            return
+
         check = crisis_check(input_data.user_text)
         if check["is_crisis"]:
             if check["severity"] == "high":
