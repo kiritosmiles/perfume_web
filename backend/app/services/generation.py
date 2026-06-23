@@ -1,6 +1,7 @@
 import hashlib
 
 from app.services.emotion import EMOTION_LABEL_TO_KEY
+from app.services.fragrance import ACCORD_CLUSTERS
 
 
 def _image_url(name: str) -> str:
@@ -69,22 +70,59 @@ def _check_allergens(notes: list[str], allergens: list[str]) -> list[str]:
     return [a for a in allergens if a.lower().strip() in search_text]
 
 
+def _diverse_top3(candidates: list[dict]) -> list[dict]:
+    """Greedy diversity selection: pick top-3 perfumes from different accord clusters.
+
+    Sorts by score descending, then iteratively picks the highest-ranked
+    perfume whose accord cluster hasn't been used yet. Falls back to
+    score-only top-3 if fewer than 3 clusters are available.
+    """
+    if not candidates:
+        return []
+
+    selected: list[dict] = []
+    used_clusters: set[str] = set()
+
+    for c in sorted(candidates, key=lambda c: c.get("score", 0), reverse=True):
+        accord = c.get("accord", "other")
+        cluster = ACCORD_CLUSTERS.get(accord, "other")
+        if cluster not in used_clusters:
+            selected.append(c)
+            used_clusters.add(cluster)
+        if len(selected) >= 3:
+            break
+
+    # Fallback: if fewer than 3 clusters found (unlikely with 9 clusters),
+    # fill remaining slots with best unused candidates
+    if len(selected) < 3:
+        for c in sorted(candidates, key=lambda c: c.get("score", 0), reverse=True):
+            if c not in selected:
+                selected.append(c)
+            if len(selected) >= 3:
+                break
+
+    return selected
+
+
 def build_skeleton(
     candidates: list[dict],
     emotion_vector: dict[str, float],
     allergens: list[str] | None = None,
 ) -> list[dict]:
-    # Normalize scores: Cypher returns raw weighted scores (max ~1.3).
+    # Normalize scores: Cypher returns raw weighted scores.
     # Scale relative to the top result so the best match anchors at ~90-95
     # and trailing results show real differentiation.
     if not candidates:
         return []
 
-    raw_scores = [c.get("score", 0) for c in candidates[:3]]
+    # Apply accord-cluster diversity before normalization
+    top3 = _diverse_top3(candidates)
+
+    raw_scores = [c.get("score", 0) for c in top3]
     top_raw = max(raw_scores) if raw_scores else 1.0
 
     skeletons = []
-    for i, c in enumerate(candidates[:3]):
+    for i, c in enumerate(top3):
         raw = c.get("score", 0)
         # Normalize: 85–95 range anchored on the top result
         normalized = 85 + int((raw / top_raw) * 10) if top_raw > 0 else 85

@@ -229,15 +229,45 @@ cypher_lines.append("")
 
 # 情绪→香韵映射
 cypher_lines.append("// === 情绪→香韵知识边 ===")
+# Expanded emotion→accord mapping (Tier 1/2/3, ~75 edges total)
+# Goal: break recommendation monotony by giving each emotion 8-10 accord paths
+# instead of 2-3, so that low-weight emotions and different scenes pull in diverse
+# perfumes from across the full accord spectrum.
 EMOTION_ACCORD_MAP = [
-    ("anxiety", "vanilla", 0.9), ("anxiety", "citrus", 0.8), ("anxiety", "lavender", 0.7),
-    ("calm", "woody", 0.9), ("calm", "musky", 0.7), ("calm", "powdery", 0.6),
-    ("sadness", "amber", 0.8), ("sadness", "warm spicy", 0.7),
-    ("joy", "citrus", 0.9), ("joy", "fruity", 0.8), ("joy", "floral", 0.7),
-    ("excitement", "sweet", 0.8), ("excitement", "aromatic", 0.7),
-    ("romance", "floral", 0.9), ("romance", "rose", 0.8), ("romance", "powdery", 0.7),
-    ("nostalgia", "woody", 0.8), ("nostalgia", "leather", 0.7), ("nostalgia", "earthy", 0.7),
-    ("melancholy", "oud", 0.8), ("melancholy", "smoky", 0.7), ("melancholy", "marine", 0.6),
+    # ── joy 开心 (10 accords) ──
+    ("joy", "citrus", 0.94), ("joy", "fruity", 0.85), ("joy", "floral", 0.82),
+    ("joy", "sweet", 0.75), ("joy", "fresh", 0.65), ("joy", "aromatic", 0.60),
+    ("joy", "tropical", 0.55), ("joy", "green", 0.50), ("joy", "white floral", 0.48),
+    ("joy", "aquatic", 0.45),
+    # ── calm 平静 (10 accords) ──
+    ("calm", "woody", 0.93), ("calm", "musky", 0.82), ("calm", "powdery", 0.78),
+    ("calm", "fresh", 0.70), ("calm", "green", 0.65), ("calm", "aquatic", 0.58),
+    ("calm", "herbal", 0.55), ("calm", "lavender", 0.50), ("calm", "amber", 0.48),
+    ("calm", "soft spicy", 0.45),
+    # ── sadness 难过 (9 accords) ──
+    ("sadness", "amber", 0.90), ("sadness", "warm spicy", 0.82), ("sadness", "woody", 0.78),
+    ("sadness", "vanilla", 0.72), ("sadness", "powdery", 0.62), ("sadness", "musky", 0.58),
+    ("sadness", "floral", 0.52), ("sadness", "soft spicy", 0.48), ("sadness", "balsamic", 0.45),
+    # ── anxiety 焦虑 (9 accords) ──
+    ("anxiety", "vanilla", 0.92), ("anxiety", "citrus", 0.83), ("anxiety", "lavender", 0.80),
+    ("anxiety", "fresh", 0.72), ("anxiety", "powdery", 0.62), ("anxiety", "green", 0.58),
+    ("anxiety", "musky", 0.52), ("anxiety", "sweet", 0.48), ("anxiety", "aquatic", 0.45),
+    # ── excitement 兴奋 (9 accords) ──
+    ("excitement", "sweet", 0.88), ("excitement", "aromatic", 0.82), ("excitement", "citrus", 0.78),
+    ("excitement", "fruity", 0.72), ("excitement", "warm spicy", 0.65), ("excitement", "amber", 0.60),
+    ("excitement", "vanilla", 0.55), ("excitement", "woody", 0.50), ("excitement", "tropical", 0.48),
+    # ── nostalgia 怀旧 (9 accords) ──
+    ("nostalgia", "woody", 0.92), ("nostalgia", "leather", 0.82), ("nostalgia", "earthy", 0.78),
+    ("nostalgia", "amber", 0.72), ("nostalgia", "warm spicy", 0.65), ("nostalgia", "oud", 0.60),
+    ("nostalgia", "patchouli", 0.55), ("nostalgia", "tobacco", 0.50), ("nostalgia", "smoky", 0.48),
+    # ── romance 浪漫 (9 accords) ──
+    ("romance", "floral", 0.94), ("romance", "rose", 0.85), ("romance", "powdery", 0.82),
+    ("romance", "sweet", 0.75), ("romance", "vanilla", 0.65), ("romance", "fruity", 0.60),
+    ("romance", "musky", 0.55), ("romance", "amber", 0.50), ("romance", "white floral", 0.48),
+    # ── melancholy 忧郁 (9 accords) ──
+    ("melancholy", "oud", 0.90), ("melancholy", "smoky", 0.82), ("melancholy", "marine", 0.75),
+    ("melancholy", "woody", 0.72), ("melancholy", "amber", 0.62), ("melancholy", "leather", 0.58),
+    ("melancholy", "earthy", 0.55), ("melancholy", "aquatic", 0.50), ("melancholy", "patchouli", 0.48),
 ]
 for emo, accord, weight in EMOTION_ACCORD_MAP:
     aid = re.sub(r"[^a-z0-9_]", "_", accord.lower())
