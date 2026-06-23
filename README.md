@@ -15,7 +15,21 @@
 | **核心价值** | 让用户不需要懂香调术语 —— 说说话、选卡片，AI 为你找到专属气味 |
 | **目标用户** | C 端消费者（为自己挑选 / 为他人送礼） |
 | **部署平台** | Web 主力（桌面+移动端响应式），App 预留扩展 |
-| **当前阶段** | MVP Phase 1 — 推荐体验闭环（不含交易链路） |
+| **当前阶段** | MVP Phase 1 — 推荐体验闭环（已完成 ✅） |
+
+### MVP Phase 1 完成状态
+
+| 指标 | 数值 |
+|------|:---:|
+| FR 覆盖率 | **16/20 (80%)** / 含部分 **19/20 (95%)** |
+| 后端测试 | **70 passed**, 0 failed |
+| 前端 vitest | **20 passed** |
+| TypeScript | **零错误** |
+| SSE 事件 | **28 定义 / 14 发射** |
+| 性能基准 | **8/8 passed** |
+| Neo4j 知识图谱 | **1,191 款香水** |
+
+> 剩余 4 项 FR (FR-1.1~1.3, FR-1.6) 属于 Phase 2 用户画像深化范围。
 
 ### C 端核心设计原则
 
@@ -78,7 +92,10 @@
 | 🎭 **情绪输入** | 支持情绪卡片挑选（8 张预设），可选文字补充 |
 | 🧠 **意图支持** | 仅「自用 (self_use)」模式 |
 | 💬 **推荐对话** | 1 次完整会话（含情绪识别 → 香调匹配 → 骨架生成 → 流式文案） |
-| 🔄 **精炼** | 最多 3 轮精炼对话 |
+| 🔄 **精炼对话** | 8 个精炼 Chip（更甜/更清新/木质调…）+ 18 条规则引擎调整情绪向量重新推荐 |
+| 🛡️ **安全兜底** | 危机关键词检测 → CrisisOverlay 全屏遮罩 + 心理热线；转人工关键词 → 通知 + 联系邮箱 |
+| ⚠️ **过敏原管理** | SettingsPage 输入过敏原 → 后端匹配 note 名称 → FragranceCard 红色徽章警告 |
+| 🔍 **反问确认** | 置信度 < 85% 时追问 UI："是这种感觉吗？" → 确认 / 重新描述 |
 | 📝 **动态笔记** | 会话中可记录灵感笔记，支持 PNG 导出 |
 | 🔗 **分享** | 可生成分享链接，将推荐结果分享给朋友 |
 | ⏰ **数据保留** | 游客对话存储在临时表，30 天未注册自动物理删除 |
@@ -100,7 +117,9 @@
 | 💬 **推荐对话** | 10 次会话/天 |
 | 🎯 **推荐生成** | 15 次/天（快速+深度合计） |
 | 🧬 **深度模式** | 3 次/天（Supervisor → 3 Subagent 多角度并行推理） |
-| 🔄 **精炼** | 不限次（本地规则） |
+| 🔄 **精炼对话** | 不限次（8 个精炼 Chip + 18 条规则引擎） |
+| 🛡️ **安全兜底** | 危机检测 + CrisisOverlay 热线遮罩 + 转人工检测 |
+| ⚠️ **过敏原** | 自定义过敏原列表，推荐结果自动匹配并红色徽章提醒 |
 | 📊 **历史浏览** | 最近 30 天会话记录 |
 | 👤 **用户画像** | 渐进式构建（前 3 次轻量，第 4 次起完整推理链路） |
 | 🃏 **卡片制作** | 1 次/月（提交配方 → 调香师协作 → 实体香氛卡片） |
@@ -170,7 +189,8 @@
 ┌─────────────────────────────────────────────────────┐
 │                    前端 (React 18 + Vite + Tailwind)    │
 │  LandingPage / GuestChatPage / AuthChatPage / SharePage │
-│       EmotionCardPicker / FragranceCard / NoteCard      │
+│  EmotionCardPicker / FragranceCard / NoteCard / CrisisOverlay │
+│  RefinementChips / EmotionConfirmation / SceneTagChips   │
 │              Zustand Stores / SSE Client               │
 └────────────────────────┬────────────────────────────┘
                          │ SSE Streaming + REST
@@ -339,7 +359,7 @@ perfume_web/
 │   │   ├── core/                   # 配置、依赖注入、Auth、限流
 │   │   ├── graph/                  # Neo4j 客户端
 │   │   ├── models/                 # Pydantic 模型
-│   │   ├── services/               # 业务逻辑（情绪/香调/文案/安全）
+│   │   ├── services/               # 业务逻辑（情绪/香调/文案/安全/精炼）
 │   │   ├── sse/                    # SSE 协议与事件流生成
 │   │   └── main.py                 # FastAPI 应用入口
 │   └── tests/                      # pytest 测试
@@ -348,7 +368,7 @@ perfume_web/
 │   └── frontend/                   # React + Vite + Tailwind 前端
 │       └── src/
 │           ├── routes/             # 页面路由组件
-│           ├── components/         # UI 组件
+│           ├── components/         # UI 组件（含 CrisisOverlay / RefinementChips / EmotionConfirmation 等）
 │           ├── hooks/              # 自定义 Hooks (useSSE)
 │           ├── stores/             # Zustand 状态管理
 │           └── lib/                # SSE 客户端封装

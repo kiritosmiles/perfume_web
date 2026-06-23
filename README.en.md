@@ -15,7 +15,21 @@
 | **Core Value** | No fragrance terminology needed — talk about your mood or pick a card, and AI finds your signature scent |
 | **Target Users** | C-end consumers (shopping for themselves / gifting for others) |
 | **Platform** | Web-first (responsive desktop + mobile), App extension reserved |
-| **Current Phase** | MVP Phase 1 — Recommendation experience loop (no transaction/payment flow) |
+| **Current Phase** | MVP Phase 1 — Recommendation experience loop (Complete ✅) |
+
+### MVP Phase 1 Completion Status
+
+| Metric | Value |
+|--------|:---:|
+| FR Coverage | **16/20 (80%)** / incl. partial **19/20 (95%)** |
+| Backend Tests | **70 passed**, 0 failed |
+| Frontend Tests | **20 passed** |
+| TypeScript | **Zero errors** |
+| SSE Events | **28 defined / 14 emitted** |
+| Perf Benchmarks | **8/8 passed** |
+| Neo4j Knowledge Graph | **1,191 fragrances** |
+
+> The 4 remaining FRs (FR-1.1~1.3, FR-1.6) are scoped for Phase 2 user profiling.
 
 ### C-End Design Principles
 
@@ -78,7 +92,10 @@ The system defines **five roles** spanning C-end consumers, B-end perfumers, and
 | 🎭 **Emotion Input** | Emotion card picker (8 preset cards), optional text supplement |
 | 🧠 **Intent Support** | Self-use (`self_use`) only |
 | 💬 **Recommendation** | 1 complete session (emotion recognition → fragrance matching → skeleton generation → streaming copy) |
-| 🔄 **Refinement** | Up to 3 refinement rounds |
+| 🔄 **Refinement** | 8 refinement chips (Sweeter/Fresher/Woody…) + 18-rule engine to adjust emotion vectors & re-recommend |
+| 🛡️ **Safety Net** | Crisis keyword detection → CrisisOverlay full-screen overlay + helplines; human handoff detection → notification + contact email |
+| ⚠️ **Allergen Mgmt** | SettingsPage allergen input → backend matches note names → FragranceCard red warning badges |
+| 🔍 **Confirmation Gate** | Confidence < 85% triggers follow-up UI: "Is this accurate?" → Confirm / Rephrase |
 | 📝 **Note Card** | Real-time inspiration notes during session, PNG export supported |
 | 🔗 **Share** | Generate shareable link for recommendation results |
 | ⏰ **Data Retention** | Guest conversations stored in temp table; auto-deleted after 30 days of no registration |
@@ -100,7 +117,9 @@ The system defines **five roles** spanning C-end consumers, B-end perfumers, and
 | 💬 **Sessions** | 10 sessions/day |
 | 🎯 **Generations** | 15/day (fast + deep combined) |
 | 🧬 **Deep Mode** | 3/day (Supervisor → 3 Subagent multi-angle parallel reasoning) |
-| 🔄 **Refinement** | Unlimited (local rules) |
+| 🔄 **Refinement** | Unlimited (8 refinement chips + 18-rule engine) |
+| 🛡️ **Safety Net** | Crisis detection + CrisisOverlay helpline overlay + human handoff detection |
+| ⚠️ **Allergens** | Custom allergen list; recommendations auto-matched with red badge warnings |
 | 📊 **History** | Last 30 days of conversation history |
 | 👤 **User Profile** | Progressive profiling (lightweight for first 3 sessions, full reasoning from session 4) |
 | 🃏 **Card Production** | 1/month (submit formula → perfumer collaboration → physical fragrance card) |
@@ -170,7 +189,8 @@ The system defines **five roles** spanning C-end consumers, B-end perfumers, and
 ┌─────────────────────────────────────────────────────┐
 │             Frontend (React 18 + Vite + Tailwind)    │
 │  LandingPage / GuestChatPage / AuthChatPage / SharePage │
-│       EmotionCardPicker / FragranceCard / NoteCard      │
+│  EmotionCardPicker / FragranceCard / NoteCard / CrisisOverlay │
+│  RefinementChips / EmotionConfirmation / SceneTagChips   │
 │              Zustand Stores / SSE Client               │
 └────────────────────────┬────────────────────────────┘
                          │ SSE Streaming + REST
@@ -184,14 +204,14 @@ The system defines **five roles** spanning C-end consumers, B-end perfumers, and
 │  /api/v1/config/llm-key      (LLM Key management)    │
 │  /api/v1/memory/*            (Memory queries)        │
 │                                                       │
-│  Services: emotion / fragrance / generation / safety  │
+│  Services: emotion / fragrance / generation / safety / refinement │
 │  Middleware: CORS / Trace-Id / RateLimit              │
 └──┬──────────────┬──────────────┬────────────────────┘
    │              │              │
    ▼              ▼              ▼
 ┌──────┐   ┌──────────┐   ┌─────────┐
-│PostgreSQL│ │  Redis 7 │   │ Neo4j 5 │
-│ pg15    │ │  Cache + │   │  Graph  │
+│PostgreSQL│ │  Redis 7 │   │Neo4j 2025│
+│ pg15    │ │  Cache + │   │  Graph   │
 │+pgvector│ │ RateLimit │   │ GraphRAG │
 └──────┘   └──────────┘   └─────────┘
 ```
@@ -200,7 +220,7 @@ The system defines **five roles** spanning C-end consumers, B-end perfumers, and
 |-------|-----------|-------|
 | Frontend | React 18 + Vite + Tailwind CSS + Zustand | SSE streaming rendering, glass morphism UI |
 | Backend | Python FastAPI | Async SSE generator, 7-domain 22+ event protocol |
-| Graph DB | Neo4j 5 | Fragrance knowledge graph (accords → ingredients → perfumes), 1-hop GraphRAG |
+| Graph DB | Neo4j 2025 | Fragrance knowledge graph (accords → ingredients → perfumes), 1-hop GraphRAG |
 | Relational DB | PostgreSQL 15 + pgvector | User/session/memory persistence, 512-dim vector semantic search |
 | Cache | Redis 7 | Layer 1 session memory (1+5 sliding window), rate limiting, LLM Key hot storage |
 | LLM | DeepSeek / Claude | 9-call constraint matrix, dual-path (BERT fast path + LLM fallback) |
@@ -223,7 +243,9 @@ The system defines **five roles** spanning C-end consumers, B-end perfumers, and
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-Launches PostgreSQL 15 (pgvector) + Redis 7 + Neo4j 5, all bound to `127.0.0.1`.
+Launches PostgreSQL 15 (pgvector) + Redis 7 + Neo4j 2025, all bound to `127.0.0.1`.
+
+> **Windows users:** If port 7687 fails with `bind: An attempt was made to access a socket in a way forbidden by its access permissions`, this is due to Windows port reservation. The `docker-compose.yml` maps Neo4j Bolt to `17687` (avoiding the 7681-7780 reserved range). Set `NEO4J_URI=bolt://localhost:17687` in `.env`. Restarting Docker Desktop usually restores port 7687.
 
 ### 2. Initialize Knowledge Graph
 
@@ -253,14 +275,20 @@ npx vite   # Open http://localhost:5173
 ### 5. Run Tests
 
 ```bash
-# Backend tests
+# Backend tests (70 tests: Auth/Memory/Quota/Share/Config)
 cd backend && poetry run pytest tests/ -v
+
+# Skip E2E tests (no Docker needed)
+cd backend && poetry run pytest tests/ -v -m "not e2e"
 
 # Frontend type-check
 cd packages/frontend && npx tsc --noEmit
 
-# Frontend component tests
+# Frontend component tests (20 tests)
 cd packages/frontend && npx vitest run
+
+# E2E browser tests (requires Docker services running)
+cd packages/frontend && npx playwright test
 ```
 
 ---
@@ -275,7 +303,7 @@ perfume_web/
 │   │   ├── core/                   # Config, DI, Auth, Rate Limiting
 │   │   ├── graph/                  # Neo4j async client
 │   │   ├── models/                 # Pydantic models
-│   │   ├── services/               # Business logic (emotion/fragrance/copy/safety)
+│   │   ├── services/               # Business logic (emotion/fragrance/copy/safety/refinement)
 │   │   ├── sse/                    # SSE protocol & event stream generator
 │   │   └── main.py                 # FastAPI app entry point
 │   └── tests/                      # pytest suite
@@ -284,7 +312,7 @@ perfume_web/
 │   └── frontend/                   # React + Vite + Tailwind frontend
 │       └── src/
 │           ├── routes/             # Page route components
-│           ├── components/         # UI components
+│           ├── components/         # UI components (CrisisOverlay / RefinementChips / EmotionConfirmation etc.)
 │           ├── hooks/              # Custom hooks (useSSE)
 │           ├── stores/             # Zustand state management
 │           └── lib/                # SSE client wrapper
