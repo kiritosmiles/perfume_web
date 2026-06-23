@@ -117,6 +117,16 @@ export function useSSE({ url }: UseSSEOptions) {
     return cleanup;
   }, [url, setEmotion, setSSEStatus, setCrisis, startGeneration, setSkeleton, addDetail, addCopyChunk, completeGeneration, setError]);
 
+  // Auto-close SSE connection when generation completes or errors
+  // Prevents reconnect loop caused by server closing the one-shot stream
+  const phase = useGenerationStore((s) => s.phase);
+  useEffect(() => {
+    if ((phase === "complete" || phase === "error") && cleanupRef.current) {
+      cleanupRef.current();
+      cleanupRef.current = null;
+    }
+  }, [phase]);
+
   const close = () => {
     if (cleanupRef.current) {
       cleanupRef.current();

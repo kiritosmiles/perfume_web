@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "../components/ui/Button";
+import { useAuthStore } from "../stores/authStore";
 
 const EMOTION_CARD_3D = [
   { emoji: "😊", label: "开心", color: "#fef3c7" },
@@ -15,6 +16,8 @@ const EMOTION_CARD_3D = [
 
 export function LandingPage() {
   const navigate = useNavigate();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const logout = useAuthStore((s) => s.logout);
 
   return (
     <div className="min-h-dvh bg-stone-50 flex flex-col overflow-hidden">
@@ -81,15 +84,66 @@ export function LandingPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4, duration: 0.6 }}
-            className="mt-10"
+            className="mt-10 flex flex-col items-center gap-4"
           >
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={() => navigate("/guest")}
-            >
-              Free Experience
-            </Button>
+            {isAuthenticated ? (
+              <>
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={() => navigate("/app")}
+                >
+                  Continue Your Journey →
+                </Button>
+                <div className="flex items-center gap-3 text-sm text-stone-400">
+                  <button
+                    onClick={() => navigate("/memory")}
+                    className="hover:text-stone-600 transition-colors underline underline-offset-2"
+                  >
+                    Memories
+                  </button>
+                  <span>·</span>
+                  <button
+                    onClick={() => navigate("/settings")}
+                    className="hover:text-stone-600 transition-colors underline underline-offset-2"
+                  >
+                    Settings
+                  </button>
+                  <span>·</span>
+                  <button
+                    onClick={() => { logout(); navigate("/"); }}
+                    className="hover:text-stone-600 transition-colors underline underline-offset-2"
+                  >
+                    Logout
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={() => navigate("/guest")}
+                >
+                  ✨ Free Experience
+                </Button>
+                <div className="flex items-center gap-3 text-sm text-stone-400">
+                  <button
+                    onClick={() => navigate("/login")}
+                    className="hover:text-stone-600 transition-colors underline underline-offset-2"
+                  >
+                    Sign In
+                  </button>
+                  <span>·</span>
+                  <button
+                    onClick={() => navigate("/register")}
+                    className="hover:text-stone-600 transition-colors underline underline-offset-2"
+                  >
+                    Register
+                  </button>
+                </div>
+              </>
+            )}
           </motion.div>
         </motion.div>
       </div>

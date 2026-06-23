@@ -30,6 +30,8 @@ async def search_fragrance_by_emotion(
                p.rating AS rating,
                p.longevity AS longevity,
                p.sillage AS sillage,
+               p.url AS fragrantica_url,
+               p.image AS image_url,
                COLLECT(DISTINCT ss.season) AS seasons,
                matched_accords[0] AS accord,
                total_accord_score AS accord_score,

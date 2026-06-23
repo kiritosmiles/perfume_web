@@ -1,6 +1,6 @@
 type SSEStatus = "idle" | "connecting" | "active" | "retrying" | "disconnected";
 
-type SSEMessageHandler = (type: string, data: Record<string, unknown>) => void;
+type SSEMessageHandler = (type: string, data: Record<string, unknown>) => boolean | void;
 
 const BACKOFF_SCHEDULE = [1000, 2000, 4000, 4000, 4000];
 const HEARTBEAT_TIMEOUT = 30000;
@@ -14,6 +14,8 @@ export function createSSEConnection(
   let retryIndex = 0;
   let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
   let stopped = false;
+
+  const STREAM_TERMINAL_EVENTS = new Set(["gen.complete", "gen.error"]);
 
   const knownTypes = [
     "chat.ack", "chat.emotion", "chat.intent", "chat.error",
@@ -49,7 +51,12 @@ export function createSSEConnection(
         retryIndex = 0; // Reset on successful message
         try {
           const data = JSON.parse(event.data);
-          onEvent(evtType, data);
+          const shouldStop = onEvent(evtType, data);
+          // Terminal events: close cleanly without triggering reconnect
+          if (shouldStop || STREAM_TERMINAL_EVENTS.has(evtType)) {
+            stopped = true;
+            es?.close();
+          }
         } catch {
           onEvent(evtType, { raw: event.data });
         }

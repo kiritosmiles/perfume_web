@@ -148,11 +148,13 @@ for item in perfumes_all:
     pid = item.get("id", perfume_count)
     safe_name = perfume_title.replace("'", "").replace('"', '')[:80]
 
+    image_url = (item.get("primaryImageUrl") or "").replace("'", "\\'")
     cypher_lines.append(f"// {brand_name} — {safe_name}")
     cypher_lines.append(
         f"CREATE (p_{pid}:Perfume {{"
         f"name: '{safe_name}', "
         f"url: '{perfume_url}', "
+        f"image: '{image_url}', "
         f"rating: {item.get('perfumeRating') or 'null'}, "
         f"longevity: {item.get('longevityAverage') or 'null'}, "
         f"sillage: {item.get('sillageAverage') or 'null'}"

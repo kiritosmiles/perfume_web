@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 interface SharePayloadData {
   recommendations: Array<{
     rank: number;
@@ -57,9 +59,9 @@ export function ShareCard({ payload }: { payload: SharePayloadData }) {
           ))}
         </div>
         <div className="text-center mt-8">
-          <a href="/" className="inline-block text-sm text-stone-600 hover:text-stone-800 bg-white/60 backdrop-blur rounded-full px-6 py-3 transition-all hover:shadow-md">
+          <Link to="/" className="inline-block text-sm text-stone-600 hover:text-stone-800 bg-white/60 backdrop-blur rounded-full px-6 py-3 transition-all hover:shadow-md">
             Experience your own →
-          </a>
+          </Link>
           <p className="text-xs text-stone-400 mt-4">perfume-ai.vercel.app</p>
         </div>
       </div>

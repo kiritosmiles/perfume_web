@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import { LandingPage } from "./routes/LandingPage";
 import { GuestChatPage } from "./routes/GuestChatPage";
@@ -10,8 +11,15 @@ import { RegisterPage } from "./routes/RegisterPage";
 import { AuthChatPage } from "./routes/AuthChatPage";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { MemoryPage } from "./routes/MemoryPage";
+import { useAuthStore } from "./stores/authStore";
 
 export function App() {
+  const hydrate = useAuthStore((s) => s.hydrate);
+
+  // Restore session from localStorage on mount
+  useEffect(() => {
+    hydrate();
+  }, [hydrate]);
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />

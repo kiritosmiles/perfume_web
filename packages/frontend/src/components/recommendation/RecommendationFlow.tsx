@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { EmotionCardPicker } from "../emotion/EmotionCardPicker";
 import { EmotionConfirmation } from "../emotion/EmotionConfirmation";
@@ -33,6 +34,7 @@ interface RecommendationFlowProps {
   }) => string | null;
   quotaInfo?: QuotaInfo;
   onQuotaExhausted?: () => void;
+  onLogout?: () => void;
 }
 
 export function RecommendationFlow({
@@ -40,6 +42,7 @@ export function RecommendationFlow({
   getSSEUrl,
   quotaInfo,
   onQuotaExhausted,
+  onLogout,
 }: RecommendationFlowProps) {
   const [inputMode, setInputMode] = useState<"cards" | "text">("cards");
   const [cardIds, setCardIds] = useState<string[]>([]);
@@ -56,6 +59,7 @@ export function RecommendationFlow({
   const cards = useGenerationStore((s) => s.cards);
   const generationError = useGenerationStore((s) => s.error);
 
+  const navigate = useNavigate();
   const { close } = useSSE({ url: sseUrl });
 
   const noteRef = useRef<HTMLDivElement>(null);
@@ -180,14 +184,30 @@ export function RecommendationFlow({
       <nav className="glass-nav sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
           <button
-            onClick={handleReset}
+            onClick={() => {
+              if (hasStarted) {
+                handleReset();
+              } else {
+                navigate("/");
+              }
+            }}
             className="text-stone-500 hover:text-stone-800 transition-colors text-sm"
           >
             {hasStarted ? "← New Session" : "← Home"}
           </button>
-          <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${statusDot}`} />
-            <span className="text-xs text-stone-400 capitalize">{sseStatus}</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${statusDot}`} />
+              <span className="text-xs text-stone-400 capitalize">{sseStatus}</span>
+            </div>
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="text-xs text-stone-400 hover:text-stone-600 transition-colors"
+              >
+                Logout
+              </button>
+            )}
           </div>
         </div>
       </nav>
@@ -296,23 +316,28 @@ export function RecommendationFlow({
           </div>
         )}
 
-        <div className="max-w-md mx-auto space-y-4">
-          {cards.map((card, i) => (
-            <FragranceCard
-              key={card.rank}
-              card={card}
-              phase={generationPhase}
-              index={i}
-            />
-          ))}
+        <div className="w-full px-4">
+          {/* Horizontal scroll container for cards */}
+          <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory
+                          scrollbar-hide -mx-2 px-2">
+            {cards.map((card, i) => (
+              <div key={card.rank} className="snap-start">
+                <FragranceCard
+                  card={card}
+                  phase={generationPhase}
+                  index={i}
+                />
+              </div>
+            ))}
 
-          {generationPhase === "skeleton" && cards.length === 0 && (
-            <>
-              <FragranceCard card={null} phase="skeleton" index={0} />
-              <FragranceCard card={null} phase="skeleton" index={1} />
-              <FragranceCard card={null} phase="skeleton" index={2} />
-            </>
-          )}
+            {generationPhase === "skeleton" && cards.length === 0 && (
+              <>
+                <FragranceCard card={null} phase="skeleton" index={0} />
+                <FragranceCard card={null} phase="skeleton" index={1} />
+                <FragranceCard card={null} phase="skeleton" index={2} />
+              </>
+            )}
+          </div>
         </div>
 
         {generationError && (

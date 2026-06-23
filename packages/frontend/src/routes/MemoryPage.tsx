@@ -1,10 +1,13 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { getMemoryTimeline, type MemoryTimelineItem, type MemoryTimelineResponse } from "../lib/apiClient";
+import { useAuthStore } from "../stores/authStore";
 
 const LEVEL_COLORS = { L2: "bg-violet-100 text-violet-700", L3: "bg-amber-100 text-amber-700" } as const;
 
 export function MemoryPage() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const [data, setData] = useState<MemoryTimelineResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,11 +45,17 @@ export function MemoryPage() {
     <div className="min-h-dvh bg-stone-50">
       <nav className="glass-nav sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
-          <a href="/" className="text-stone-500 hover:text-stone-800 transition-colors text-sm">
+          <Link to="/" className="text-stone-500 hover:text-stone-800 transition-colors text-sm">
             ← Home
-          </a>
+          </Link>
           <span className="text-sm font-medium text-stone-700">AI 眼中的我</span>
-          <span className="w-12" />
+          {isAuthenticated ? (
+            <Link to="/app" className="text-xs text-stone-400 hover:text-stone-600 transition-colors">
+              App →
+            </Link>
+          ) : (
+            <span className="w-12" />
+          )}
         </div>
       </nav>
 

@@ -6,6 +6,7 @@ interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
   isAuthenticated: boolean;
+  isHydrated: boolean;
 
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, browserId?: string) => Promise<void>;
@@ -19,6 +20,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   accessToken: null,
   refreshToken: null,
   isAuthenticated: false,
+  isHydrated: false,
 
   login: async (email, password) => {
     const data = await apiLogin(email, password);
@@ -29,6 +31,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
       isAuthenticated: true,
+      isHydrated: true,
     });
   },
 
@@ -41,18 +44,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
       isAuthenticated: true,
+      isHydrated: true,
     });
   },
 
   logout: () => {
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
-    set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false });
+    set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false, isHydrated: true });
   },
 
   refreshAuth: async () => {
     const rt = get().refreshToken || localStorage.getItem("refresh_token");
-    if (!rt) return;
+    if (!rt) {
+      set({ isHydrated: true });
+      return;
+    }
     try {
       const data = await refreshToken(rt);
       localStorage.setItem("access_token", data.access_token);
@@ -62,18 +69,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         accessToken: data.access_token,
         refreshToken: data.refresh_token,
         isAuthenticated: true,
+        isHydrated: true,
       });
     } catch {
       get().logout();
+      set({ isHydrated: true });
     }
   },
 
   hydrate: () => {
+    if (get().isHydrated) return;
     const rt = localStorage.getItem("refresh_token");
     if (rt) {
       const at = localStorage.getItem("access_token");
       set({ accessToken: at, refreshToken: rt });
       get().refreshAuth();
+    } else {
+      set({ isHydrated: true });
     }
   },
 }));

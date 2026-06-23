@@ -34,6 +34,8 @@ describe("generationStore", () => {
         source: "graphrag_match" as const,
         allergen_warnings: [],
         is_partial: true as const,
+        image_url: null,
+        fragrantica_url: null,
       },
     ]);
     const state = useGenerationStore.getState();
@@ -54,6 +56,8 @@ describe("generationStore", () => {
         source: "graphrag_match" as const,
         allergen_warnings: [],
         is_partial: true as const,
+        image_url: null,
+        fragrantica_url: null,
       },
     ]);
     useGenerationStore.getState().addDetail(1, {
@@ -78,6 +82,8 @@ describe("generationStore", () => {
         source: "graphrag_match" as const,
         allergen_warnings: [],
         is_partial: true as const,
+        image_url: null,
+        fragrantica_url: null,
       },
     ]);
     useGenerationStore.getState().addCopyChunk(1, "Hello");

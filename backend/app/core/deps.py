@@ -20,15 +20,20 @@ async def get_db_pg() -> AsyncGenerator[asyncpg.Connection, None]:
 
 
 async def get_current_user(request: Request) -> dict:
-    """Extract JWT from Authorization header, return {id, email}."""
+    """Extract JWT from Authorization header or ?token= query param, return {id, email}."""
     from app.core.auth import decode_token
     from app.core.pg import get_pg_pool
 
+    token: str | None = None
     auth = request.headers.get("Authorization")
-    if not auth or not auth.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authorization header")
+    if auth and auth.startswith("Bearer "):
+        token = auth.removeprefix("Bearer ")
+    else:
+        # Fallback for EventSource (browser SSE cannot send custom headers)
+        token = request.query_params.get("token")
 
-    token = auth.removeprefix("Bearer ")
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authorization header")
     try:
         payload = decode_token(token)
     except ValueError:

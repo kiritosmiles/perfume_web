@@ -11,6 +11,13 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  // Redirect if already logged in
+  if (isAuthenticated) {
+    navigate("/app", { replace: true });
+    return null;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,9 +37,9 @@ export function LoginPage() {
     <div className="min-h-dvh bg-stone-50 flex flex-col">
       <nav className="glass-nav sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center">
-          <a href="/" className="text-stone-500 hover:text-stone-800 transition-colors text-sm">
+          <Link to="/" className="text-stone-500 hover:text-stone-800 transition-colors text-sm">
             ← Home
-          </a>
+          </Link>
         </div>
       </nav>
       <div className="flex-1 flex items-center justify-center px-4">

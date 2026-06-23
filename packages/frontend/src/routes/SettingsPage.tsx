@@ -1,11 +1,14 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "../components/ui/Button";
 import { saveLLMKey, getLLMKeyStatus, getBrowserId } from "../lib/apiClient";
+import { useAuthStore } from "../stores/authStore";
 
 const ALLERGENS_STORAGE_KEY = "perfume_allergens";
 
 export function SettingsPage() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const browserId = getBrowserId();
 
   const [apiKey, setApiKey] = useState("");
@@ -45,10 +48,17 @@ export function SettingsPage() {
     <div className="min-h-dvh bg-stone-50 flex flex-col">
       <nav className="glass-nav sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center">
-          <a href="/" className="text-stone-500 hover:text-stone-800 transition-colors text-sm">
+          <Link to="/" className="text-stone-500 hover:text-stone-800 transition-colors text-sm">
             ← Home
-          </a>
-          <span className="ml-auto text-xs text-stone-400">Settings</span>
+          </Link>
+          {isAuthenticated && (
+            <Link to="/app" className="ml-auto mr-3 text-xs text-stone-400 hover:text-stone-600 transition-colors">
+              App →
+            </Link>
+          )}
+          <span className={isAuthenticated ? "" : "ml-auto"}>
+            <span className="text-xs text-stone-400">Settings</span>
+          </span>
         </div>
       </nav>
 

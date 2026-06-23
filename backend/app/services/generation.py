@@ -1,4 +1,12 @@
+import hashlib
+
 from app.services.emotion import EMOTION_LABEL_TO_KEY
+
+
+def _image_url(name: str) -> str:
+    """Deterministic placeholder image URL based on perfume name hash."""
+    seed = hashlib.md5(name.encode()).hexdigest()[:8]
+    return f"https://picsum.photos/seed/{seed}/400/500"
 
 
 STORY_TEMPLATES: dict[str, list[str]] = {
@@ -101,6 +109,8 @@ def build_skeleton(
             "longevity": round(c.get("longevity") or 3.0, 1),
             "sillage": round(c.get("sillage") or 2.5, 1),
             "season": season,
+            "image_url": c.get("image_url") or _image_url(name),
+            "fragrantica_url": c.get("fragrantica_url") or None,
         })
     return skeletons
 

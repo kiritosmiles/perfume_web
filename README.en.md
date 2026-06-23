@@ -5,7 +5,7 @@
 > Understand your emotions through scent 🌿
 
 **Emotion × Personality × Fragrance AI Agent** is an intelligent fragrance recommendation web app for C-end users. Powered by LLM as its core reasoning engine, combined with GraphRAG graph-structured reasoning, sentiment analysis, and a three-layer hierarchical memory architecture, it matches users' emotional states, personality traits, and usage contexts with a fragrance knowledge graph to generate personalized fragrance recommendations with narrative copy — delivering "emotion-driven perfume discovery."
-
+![img.png](img.png)
 ---
 
 ## Positioning

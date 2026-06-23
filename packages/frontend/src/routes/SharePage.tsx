@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ShareCard } from "../components/share/ShareCard";
 import { getShareDetail, type SharePayloadData } from "../lib/apiClient";
@@ -44,9 +44,9 @@ export function SharePage() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-card p-8 max-w-md text-center">
           <p className="text-2xl mb-3">🔗</p>
           <h2 className="text-lg font-semibold text-stone-700 mb-2">{error || "Share link not available"}</h2>
-          <a href="/" className="inline-block mt-4 text-sm text-stone-600 hover:text-stone-800 bg-stone-100 rounded-full px-5 py-2.5 transition-colors">
+          <Link to="/" className="inline-block mt-4 text-sm text-stone-600 hover:text-stone-800 bg-stone-100 rounded-full px-5 py-2.5 transition-colors">
             Start your own experience →
-          </a>
+          </Link>
         </motion.div>
       </div>
     );

@@ -7,6 +7,8 @@ export type SkeletonCard = RecommendationSkeleton;
 export interface FragranceCardUI extends Omit<RecommendationSkeleton, "is_partial"> {
   expanded_fields?: Record<string, unknown>;
   copy_text: string;
+  image_url: string | null;
+  fragrantica_url: string | null;
 }
 
 type GenerationPhase =
@@ -64,6 +66,8 @@ export const useGenerationStore = create<GenerationState>((set) => ({
         match_score: r.match_score,
         source: r.source,
         allergen_warnings: r.allergen_warnings,
+        image_url: r.image_url || null,
+        fragrantica_url: r.fragrantica_url || null,
         copy_text: "",
       })),
     }),

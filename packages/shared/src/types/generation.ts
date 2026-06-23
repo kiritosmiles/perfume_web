@@ -7,6 +7,11 @@ export interface RecommendationSkeleton {
   source: "graphrag_match" | "template_fallback" | "llm_composer";
   allergen_warnings: string[];
   is_partial: true;
+  image_url: string | null;
+  fragrantica_url: string | null;
+  longevity?: number;
+  sillage?: number;
+  season?: string;
 }
 
 export interface FragranceCard extends Omit<RecommendationSkeleton, "is_partial"> {
