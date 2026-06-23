@@ -19,15 +19,15 @@
 | FR-3.1 | 情绪—香调映射 | ✅ 完成 | Neo4j GraphRAG 1-hop (Emotion→Accord→Perfume) |
 | FR-3.6 | 产品输出与对比 | ✅ 完成 | FragranceCard ranking + match_score + 进度条 |
 | FR-4.11 | 全量会话持久化 | ✅ 完成 | Memory API + MemoryPage 时间线 |
-| FR-5.6 | 危机场景差异化 | ✅ 完成 | crisis_check → safety.crisis/safety.block SSE events |
+| FR-5.6 | 危机场景差异化 | ✅ 完成 | crisis_check → safety.crisis/safety.block + CrisisOverlay 渲染热线 |
+| FR-1.8 | 香氛安全档案 | ✅ 完成 | SettingsPage 过敏原输入 + backend _check_allergens + FragranceCard 红色徽章 |
+| FR-3.7 | 推荐精炼对话 | ✅ 完成 | 18条规则引擎 refinement.py + 8 RefinementChips + SSE adjustable vector |
+| FR-4.7 | 反问确认机制 | ✅ 完成 | 置信度<85%追问UI (Yes/Let me rephrase) |
+| FR-5.3 | 转人工机制 | ✅ 完成 | human_handoff_check("转人工/找客服") → system.notification + CrisisOverlay |
 
-| FR-1.8 | 香氛安全档案 | 🔶 部分 | allergen_warnings 字段存在，但用户无法主动管理过敏原 |
-| FR-2.5 | 情绪价值维度映射 | 🔶 部分 | emotion→value_dim 映射存在，但仅用于 graphrag_match 评分 |
+| FR-2.5 | 情绪价值维度映射 | 🔶 部分 | emotion→value_dim 映射存在，但仅用于 graphrag_match 评分 — MVP 够用 |
 | FR-3.5 | AI配方生成（意图门控） | 🔶 部分 | self_use 模式完整，gift/explore 模式待 Phase 2 |
-| FR-3.7 | 推荐精炼对话 | 🔶 部分 | 仅 "Correct" 重置，无真正的 refinement round（待 Phase 3） |
-| FR-4.7 | 反问确认机制 | 🔶 部分 | 情绪确认存在，意图置信度 <0.85 追问机制缺失 |
-| FR-5.3 | 转人工机制 | 🔶 部分 | 危机检测存在，human_handoff 触发待实现 |
-| FR-5.7 | 会话意图检测 | 🔶 部分 | resolve_scene_tag 存在基础版，但非 LLM 驱动 |
+| FR-5.7 | 会话意图检测 | 🔶 部分 | 基于场景标签+关键词检测，LLM驱动待 Phase 2 |
 
 | FR-1.1 | 用户画像建档 | ❌ 未实现 | Phase 2+ 用户系统深化 |
 | FR-1.2 | 冷启动引导问卷 | ❌ 未实现 | Phase 2+ 新用户引导 |
@@ -57,9 +57,9 @@
 
 | 类别 | 数量 | 占比 |
 |------|:---:|:---:|
-| ✅ 完成 | 12 | 34% |
-| 🔶 部分 | 7 | 20% |
-| ❌ 未实现 (MVP内) | 4 | 11% |
+| ✅ 完成 | 16 | 46% |
+| 🔶 部分 | 3 | 9% |
+| ❌ 未实现 (实际Phase 2+) | 4 | 11% |
 | ⏳ 后MVP (Phase 2-4) | 17 | 49% |
 
-**MVP Phase 1 覆盖率: 12/20 = 60% (含部分实现: 19/20 = 95%)**
+**MVP Phase 1 覆盖率: 16/20 = 80% (含部分实现: 19/20 = 95%)**
