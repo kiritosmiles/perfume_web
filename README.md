@@ -190,7 +190,7 @@
    │              │              │
    ▼              ▼              ▼
 ┌──────┐   ┌──────────┐   ┌─────────┐
-│PostgreSQL│ │  Redis 7 │   │ Neo4j 5 │
+│PostgreSQL│ │  Redis 7 │   │Neo4j 2025│
 │ pg15    │ │  缓存+   │   │ 图数据库 │
 │+pgvector│ │  速率限制 │   │GraphRAG │
 └──────┘   └──────────┘   └─────────┘
@@ -200,11 +200,67 @@
 |------|------|------|
 | 前端 | React 18 + Vite + Tailwind CSS + Zustand | SSE 流式渲染，玻璃拟态设计 |
 | 后端 | Python FastAPI | 异步 SSE 生成器，7 域 22+ 事件协议 |
-| 图数据库 | Neo4j 5 | 香调知识图谱（香调→香料→香水），1-hop GraphRAG |
+| 图数据库 | Neo4j 2025 | 香调知识图谱（香调→香料→香水），1-hop GraphRAG |
 | 关系数据库 | PostgreSQL 15 + pgvector | 用户/会话/记忆持久化，512 维向量语义检索 |
 | 缓存 | Redis 7 | Layer 1 会话记忆（1+5 滑动窗口）、速率限制、LLM Key 热存储 |
 | LLM | DeepSeek / Claude | 9 调用点约束矩阵，双路径（BERT 快路径 + LLM 兜底） |
 | 部署 | Docker Compose | 一键启动全部基础设施 |
+
+---
+
+## API 端点参考
+
+### 游客 (Guest)
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| `POST` | `/api/v1/guest/sessions` | 创建会话（SSE 流） |
+| `GET` | `/api/v1/guest/sessions?card_ids=…&text=…` | 快捷对话（SSE 流） |
+
+### 认证 (Auth)
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| `POST` | `/api/v1/auth/register` | 注册 `{email, password, browser_id?}` |
+| `POST` | `/api/v1/auth/login` | 登录 → JWT (Access 1h + Refresh 7d) |
+| `POST` | `/api/v1/auth/refresh` | Token 刷新（轮换） |
+| `GET` | `/api/v1/auth/me` | 当前用户信息（需 Bearer Token） |
+
+### 推荐 (Recommend — 需认证)
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| `POST` | `/api/v1/recommend/sessions` | 注册用户推荐（SSE） |
+| `GET` | `/api/v1/recommend/sessions?card_ids=…` | 快捷推荐（SSE） |
+| `GET` | `/api/v1/recommend/quota` | 查看配额 `{sessions, generations, deep}` |
+
+### 配置 (Config)
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| `POST` | `/api/v1/config/llm-key` | 保存用户 LLM Key |
+| `GET` | `/api/v1/config/llm-key/status?browser_id=` | 检查 Key 配置状态 |
+
+### 分享 (Share)
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| `POST` | `/api/v1/share` | 创建分享链接（7 天有效） |
+| `GET` | `/api/v1/share/{id}` | 获取分享内容 |
+
+### 记忆 (Memory — 需认证)
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| `GET` | `/api/v1/memory/timeline` | 查询用户记忆时间线 |
+
+### 系统
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| `GET` | `/api/v1/health` | 健康检查 `{status, neo4j, postgres, redis}` |
+
+---
 
 ---
 
@@ -223,13 +279,15 @@
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-启动 PostgreSQL 15 (pgvector) + Redis 7 + Neo4j 5，全部绑定 `127.0.0.1`。
+启动 PostgreSQL 15 (pgvector) + Redis 7 + Neo4j 2025，全部绑定 `127.0.0.1`。
+
+> **Windows 用户注意：** 如果遇到端口 7687 报错 `bind: An attempt was made to access a socket in a way forbidden by its access permissions`，这是 Windows 端口预留机制所致。已在 `docker-compose.yml` 中将 Neo4j Bolt 端口映射到 `17687`（避让 7681-7780 保留范围），`.env` 中 `NEO4J_URI` 需对应设为 `bolt://localhost:17687`。重启 Docker Desktop 后通常可恢复使用 7687。
 
 ### 2. 初始化知识图谱
 
 ```bash
 # 导入 Fragrantica 香调数据到 Neo4j
-python scripts/import_fragrantica_to_neo4j.py --input docs/dataset_fragrantica_*.json
+python scripts/import_to_neo4j.py
 ```
 
 ### 3. 启动后端
@@ -253,14 +311,20 @@ npx vite   # 访问 http://localhost:5173
 ### 5. 运行测试
 
 ```bash
-# 后端测试
+# 后端测试 (70 个测试，含 Auth/Memory/Quota/Share/Config)
 cd backend && poetry run pytest tests/ -v
+
+# 排除 E2E（不需要 Docker 服务）
+cd backend && poetry run pytest tests/ -v -m "not e2e"
 
 # 前端类型检查
 cd packages/frontend && npx tsc --noEmit
 
-# 前端组件测试
+# 前端组件测试 (20 个测试)
 cd packages/frontend && npx vitest run
+
+# E2E 浏览器测试（需要 Docker 服务运行）
+cd packages/frontend && npx playwright test
 ```
 
 ---
