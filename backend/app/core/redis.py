@@ -257,6 +257,107 @@ async def invalidate_graphrag_cache(pattern: str = "*") -> None:
         logger.debug("GraphRAG cache invalidation failed pattern=%s", pattern, exc_info=True)
 
 
+# ── Boundary overstep counter (FR-5.9) ─────────────────────────────────────────
+
+BOUNDARY_OVERSTEP_TTL = 86400  # 24h — matches session lifetime
+
+
+async def increment_boundary_overstep(session_id: str) -> int:
+    """Increment and return the boundary overstep counter for a session.
+
+    Used by FR-5.9: 3 consecutive overstep → forced human handoff.
+
+    Returns the new count or -1 if Redis is unavailable (caller treats as counter=0).
+    """
+    r = _get_client()
+    if r is None:
+        return -1
+    key = f"boundary:overstep:{session_id}"
+    try:
+        count = await r.incr(key)
+        await r.expire(key, BOUNDARY_OVERSTEP_TTL)
+        return count
+    except Exception:
+        logger.debug("Boundary counter increment failed session=%s", session_id, exc_info=True)
+        return -1
+
+
+async def reset_boundary_overstep(session_id: str) -> None:
+    """Reset overstep counter for a session (e.g. after handoff or new session).
+
+    No-op if Redis is unavailable.
+    """
+    r = _get_client()
+    if r is None:
+        return
+    try:
+        await r.delete(f"boundary:overstep:{session_id}")
+    except Exception:
+        pass
+
+
+# ── Skeleton cache (FR: Phase 4 — copy text degradation fallback) ─────────────
+
+SKELETON_CACHE_TTL = 86400  # 24 hours
+
+
+def build_skeleton_cache_key(
+    emotion_vector: dict[str, float],
+    intent: str,
+    scene_tag: str | None,
+) -> str:
+    """Build a deterministic cache key from emotion vector + intent + scene.
+
+    Same pattern as build_graphrag_cache_key: sorted dims alphabetically,
+    .3f precision, tiny values (<=0.05) dropped.
+
+    Example key: skeleton:anxiety:0.350+calm:0.120+joy:0.160:self_use:none
+    """
+    sorted_dims = sorted(emotion_vector.items())
+    vec_part = "+".join(
+        f"{k}:{v:.3f}" for k, v in sorted_dims if v > 0.05
+    )
+    scene = scene_tag or "none"
+    return f"skeleton:{vec_part}:{intent}:{scene}"
+
+
+async def cache_skeleton(
+    key: str,
+    skeleton_data: list[dict],
+    ttl: int = SKELETON_CACHE_TTL,
+) -> None:
+    """Cache skeleton cards (with copy_full_text) for LLM degradation fallback.
+
+    Stores the full skeleton array as JSON. Each skeleton dict should include
+    the LLM-generated copy_full_text field for later cache-hit streaming.
+
+    Fire-and-forget — caller should not await this in the hot path.
+    Gracefully does nothing if Redis is not initialized.
+    """
+    r = _get_client()
+    if r is None:
+        return
+    try:
+        await r.set(key, json.dumps(skeleton_data, ensure_ascii=False), ex=ttl)
+    except Exception:
+        logger.debug("Skeleton cache write failed key=%s", key, exc_info=True)
+
+
+async def get_cached_skeleton(key: str) -> list[dict] | None:
+    """Retrieve cached skeleton cards. Returns None on miss or Redis unavailable."""
+    r = _get_client()
+    if r is None:
+        return None
+    try:
+        raw = await r.get(key)
+        if raw is None:
+            return None
+        return json.loads(raw)
+    except Exception:
+        logger.debug("Skeleton cache read failed key=%s", key, exc_info=True)
+        return None
+
+
 # ── Health check ──────────────────────────────────────────────────────────────
 
 async def check_redis_health() -> bool:

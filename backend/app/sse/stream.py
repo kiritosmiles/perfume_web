@@ -3,7 +3,7 @@ import contextlib
 import json
 import logging
 import uuid
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Any
 
 from neo4j.exceptions import Neo4jError, ServiceUnavailable, SessionExpired
 
@@ -13,6 +13,8 @@ from app.models.guest import GuestSessionInput
 from app.core.redis import (
     cache_emotion_vector, get_cached_emotion_vector, get_llm_key,
     build_graphrag_cache_key, cache_graphrag_result, get_cached_graphrag_result,
+    build_skeleton_cache_key, cache_skeleton, get_cached_skeleton,
+    increment_boundary_overstep, reset_boundary_overstep,
 )
 from app.services.emotion import resolve_emotion_from_cards, EMOTION_LABELS, DIMENSIONS
 from app.services.fallback import search_fallback_fragrances
@@ -22,6 +24,7 @@ from app.services.intent import detect_intent, is_guest_intent_allowed
 from app.services.llm import generate_copy_for_perfume
 from app.services.llm_emotion import resolve_emotion_from_text
 from app.services.safety import crisis_check, human_handoff_check
+from app.services.boundary import _call_boundary_llm, check_boundary_result
 from app.services.memory import trigger_l1_consolidation
 from app.core.recall import recall_pipeline
 from app.sse.protocol import sse, now_iso
@@ -252,6 +255,18 @@ async def sse_event_stream(
         else:
             yield sse("safety.ok", {"flags": []})
 
+    # ── FR-5.9: Boundary safety check (async, non-blocking LLM Call B) ──
+    boundary_task: asyncio.Task | None = None
+    if input_data.user_text and input_data.user_text.strip():
+        boundary_task = asyncio.create_task(
+            _call_boundary_llm(
+                input_data.user_text,
+                session_context={"intent": input_data.intent or "self_use"},
+                api_key_override=user_api_key,
+                base_url_override=user_base_url,
+            )
+        )
+
     # 1) chat.ack
     yield sse("chat.ack", {
         "message_id": message_id,
@@ -399,6 +414,85 @@ async def sse_event_stream(
         yield _hb
     await asyncio.sleep(0)
 
+    # ── FR-5.9: Boundary check verdict (before generation) ──────────────
+    boundary_verdict: dict[str, Any] = {"verdict": "unchecked", "overstep_flag": "unchecked"}
+    if boundary_task is not None and boundary_task.done():
+        try:
+            boundary_result = boundary_task.result()
+        except Exception:
+            boundary_result = None
+        boundary_verdict = check_boundary_result(boundary_result)
+
+        if boundary_verdict["verdict"] in ("overstep", "injection", "hostile"):
+            reason = boundary_verdict["verdict"]
+
+            if boundary_verdict["verdict"] == "overstep":
+                count = await increment_boundary_overstep(sid)
+                if count >= 3:
+                    # FR-5.3 trigger #1: consecutive overstep → forced handoff
+                    yield sse("system.notification", {
+                        "kind": "human_handoff",
+                        "message": "检测到多次超出角色范围的请求，已为你转接人工客服。",
+                        "action_link": "mailto:support@perfume-ai.example.com",
+                    })
+                    yield sse("gen.complete", {
+                        "generation_id": generation_id,
+                        "total_cards": 0,
+                        "metadata": {
+                            "reason": "overstep_limit",
+                            "overstep_flag": boundary_verdict["overstep_flag"],
+                            "boundary_reasoning": boundary_verdict.get("reasoning", ""),
+                        },
+                    })
+                    await reset_boundary_overstep(sid)
+                    hb_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await hb_task
+                    return
+                # count < 3: block with overstep reason
+                yield sse("safety.block", {
+                    "reason": "overstep",
+                    "user_message": "抱歉，我是香水推荐助手，只能帮你解答香水相关的问题哦 🌿",
+                    "boundary_reasoning": boundary_verdict.get("reasoning", ""),
+                })
+                yield sse("gen.complete", {
+                    "generation_id": generation_id,
+                    "total_cards": 0,
+                    "metadata": {
+                        "reason": "overstep",
+                        "overstep_flag": boundary_verdict["overstep_flag"],
+                    },
+                })
+                hb_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await hb_task
+                return
+            else:
+                # injection or hostile — block immediately
+                yield sse("safety.block", {
+                    "reason": reason,
+                    "user_message": "消息已发送",
+                })
+                yield sse("gen.complete", {
+                    "generation_id": generation_id,
+                    "total_cards": 0,
+                    "metadata": {
+                        "reason": reason,
+                        "overstep_flag": boundary_verdict["overstep_flag"],
+                    },
+                })
+                hb_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await hb_task
+                return
+
+        if boundary_verdict["verdict"] == "borderline":
+            yield sse("safety.warn", {
+                "level": "low",
+                "message": "我是香水推荐助手，让我帮你找到最适合的香氛吧 🌸",
+                "boundary_reasoning": boundary_verdict.get("reasoning", ""),
+            })
+
     # 3) gen.start
     yield sse("gen.start", {
         "generation_id": generation_id,
@@ -517,6 +611,26 @@ async def sse_event_stream(
         yield _hb
     await asyncio.sleep(0)
 
+    # ── Skeleton cache setup (FR: Phase 4) ──────────────────────────────
+    _sk_cache_eligible = (
+        emotion_result["source"] in ("card_preset", "llm_text_keyword")
+        and not seed_notes
+    )
+    _sk_cache_key: str | None = None
+    skeleton_cache_hit: bool = False
+    _collected_copy_texts: list[str] = []
+    cached_skeletons: list[dict] | None = None
+    if _sk_cache_eligible:
+        _sk_cache_key = build_skeleton_cache_key(
+            emotion_result["emotion_vector"],
+            intent_result["intent"],
+            input_data.scene_tag,
+        )
+        cached_skeletons = await get_cached_skeleton(_sk_cache_key)
+        if cached_skeletons is not None:
+            skeleton_cache_hit = True
+            logger.debug("Skeleton cache hit key=%s cards=%d", _sk_cache_key, len(cached_skeletons))
+
     # 5) gen.skeleton
     skeletons = build_skeleton(
         candidates, emotion_result["emotion_vector"], input_data.allergens,
@@ -550,8 +664,35 @@ async def sse_event_stream(
             yield _hb
         await asyncio.sleep(0)
 
-    # 7) gen.copy — LLM streaming with template fallback
+    # 7) gen.copy — LLM streaming with skeleton cache + template fallback
     for sk in skeletons:
+        # ── Try skeleton cache first ──────────────────────────────────
+        cached_copy_text: str | None = None
+        if skeleton_cache_hit and cached_skeletons:
+            cached = next(
+                (c for c in cached_skeletons
+                 if c.get("name") == sk["name"] and c.get("brand") == sk.get("brand")),
+                None,
+            )
+            if cached and cached.get("copy_full_text"):
+                cached_copy_text = cached["copy_full_text"]
+
+        if cached_copy_text:
+            # Use cached copy text — split by lines for sentence-by-sentence streaming
+            sentences = [s.strip() for s in cached_copy_text.split("\n") if s.strip()]
+            for i, sentence in enumerate(sentences):
+                yield sse("gen.copy", {
+                    "generation_id": generation_id,
+                    "rank": sk["rank"],
+                    "copy_text_chunk": sentence,
+                    "is_final": (i == len(sentences) - 1),
+                })
+                for _hb in _drain_heartbeats():
+                    yield _hb
+                await asyncio.sleep(0)
+            continue  # Skip LLM — cache served
+
+        # ── LLM path (existing logic) ─────────────────────────────────
         llm_chunks: list[str] = []
         async for chunk, _ in generate_copy_for_perfume(
             sk["rank"], generation_id,
@@ -575,6 +716,9 @@ async def sse_event_stream(
                 for _hb in _drain_heartbeats():
                     yield _hb
                 await asyncio.sleep(0)
+            # Collect full copy text for skeleton cache write
+            if _sk_cache_eligible:
+                _collected_copy_texts.append("\n".join(llm_chunks))
         else:
             # LLM unavailable → fall back to templates
             copy_chunks = build_copy_stream(
@@ -591,6 +735,9 @@ async def sse_event_stream(
                 for _hb in _drain_heartbeats():
                     yield _hb
                 await asyncio.sleep(0)
+            # Template text also collected for cache (as degraded copy)
+            if _sk_cache_eligible:
+                _collected_copy_texts.append("\n".join(copy_chunks))
 
     # ── L1 Evidence Write (sync, <2ms) ──────────────────────────────────
     user_msg = input_data.user_text or ",".join(input_data.emotion_card_ids) if not input_data.user_text else input_data.user_text
@@ -623,8 +770,40 @@ async def sse_event_stream(
             "diversity_mode": input_data.diversity > 0,
             "diversity_level": input_data.diversity,
             "cross_style": input_data.diversity >= 0.5,
+            "overstep_flag": boundary_verdict.get("overstep_flag", "unchecked"),
+            "skeleton_cache_hit": skeleton_cache_hit,
         },
     })
+
+    # ── Skeleton cache write (fire-and-forget, after gen.complete) ──────
+    if (
+        _sk_cache_eligible
+        and _sk_cache_key
+        and not skeleton_cache_hit
+        and skeletons
+        and search_source not in ("degraded_backup", "generic_top5")
+        and len(_collected_copy_texts) == len(skeletons)
+    ):
+        for sk, copy_text in zip(skeletons, _collected_copy_texts):
+            sk["copy_full_text"] = copy_text
+        asyncio.create_task(cache_skeleton(_sk_cache_key, skeletons))
+
+    # ── FR-5.9: Final boundary check (if LLM didn't complete in time) ──
+    if boundary_task is not None and not boundary_task.done():
+        try:
+            boundary_result = await asyncio.wait_for(boundary_task, timeout=1.0)
+        except (asyncio.TimeoutError, Exception):
+            boundary_result = None
+        if boundary_result is not None:
+            final_verdict = check_boundary_result(boundary_result)
+            if final_verdict["verdict"] in ("overstep", "injection", "hostile"):
+                logger.warning(
+                    "Boundary violation detected post-generation sid=%s verdict=%s",
+                    sid, final_verdict["verdict"],
+                )
+                # Increment counter for tracking; response already sent
+                if final_verdict["verdict"] == "overstep":
+                    await increment_boundary_overstep(sid)
 
     # ── L1 Async Consolidation (fire-and-forget, ~500ms) ─────────────────
     if user_msg or agent_msg:
