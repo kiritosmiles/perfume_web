@@ -178,7 +178,7 @@ jobs:
       - name: Create test share link
         working-directory: backend
         run: |
-          cat > /tmp/create_share.py << 'PYEOF'
+          cat > _create_share.py << 'PYEOF'
           import asyncio, secrets, string, json
           async def main():
               from app.core.pg import init_pg_pool, get_pg_pool
@@ -197,7 +197,7 @@ jobs:
               print(sid)
           asyncio.run(main())
           PYEOF
-          SHARE_ID=$(poetry run python /tmp/create_share.py)
+          SHARE_ID=$(poetry run python _create_share.py)
           echo "TEST_SHARE_ID=$SHARE_ID" >> $GITHUB_ENV
         env:
           DB_HOST: localhost
