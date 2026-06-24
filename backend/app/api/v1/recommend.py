@@ -69,6 +69,11 @@ async def start_auth_session_get(
     refine: str = Query(default=""),
     gate_answer: str = Query(default=""),
     intent: str = Query(default="self_use"),
+    season: str = Query(default=""),
+    time_of_day: str = Query(default=""),
+    weather_code: str = Query(default=""),
+    temperature: str = Query(default=""),
+    diversity: str = Query(default="0.0"),
     current_user: dict = Depends(get_current_user),
 ):
     await check_rate_limit(request)
@@ -86,6 +91,11 @@ async def start_auth_session_get(
     refine_val = refine.strip() or None
     gate_answer_val = gate_answer.strip() or None
     intent_val = intent.strip() if intent.strip() in ("self_use", "gift", "explore") else "self_use"
+    season_val = season.strip() or None
+    time_of_day_val = time_of_day.strip() or None
+    weather_code_val = int(weather_code) if weather_code.strip() else None
+    temp_val = float(temperature) if temperature.strip() else None
+    diversity_val = float(diversity) if diversity.strip() else 0.0
     input_data = GuestSessionInput(
         emotion_card_ids=card_list,
         scene_tag=scene or None,
@@ -95,6 +105,11 @@ async def start_auth_session_get(
         refine=refine_val,
         gate_answer=gate_answer_val,
         intent=intent_val,  # type: ignore[arg-type]
+        season=season_val,
+        time_of_day=time_of_day_val,
+        weather_code=weather_code_val,
+        temperature=temp_val,
+        diversity=diversity_val,
     )
     return StreamingResponse(
         sse_event_stream(input_data, user_id=user_id),

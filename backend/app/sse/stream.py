@@ -10,7 +10,10 @@ from neo4j.exceptions import Neo4jError, ServiceUnavailable, SessionExpired
 from app.core.deps import get_db_neo4j
 from app.core.pg import get_pg_pool
 from app.models.guest import GuestSessionInput
-from app.core.redis import cache_emotion_vector, get_cached_emotion_vector, get_llm_key
+from app.core.redis import (
+    cache_emotion_vector, get_cached_emotion_vector, get_llm_key,
+    build_graphrag_cache_key, cache_graphrag_result, get_cached_graphrag_result,
+)
 from app.services.emotion import resolve_emotion_from_cards, EMOTION_LABELS, DIMENSIONS
 from app.services.fallback import search_fallback_fragrances
 from app.services.fragrance import search_fragrance_by_emotion
@@ -422,41 +425,93 @@ async def sse_event_stream(
         _logger.debug("Refinement applied: keywords=%s → primary=%s conf=%.2f",
                        refine_keywords, emotion_result["primary_emotion"], emotion_result["confidence"])
 
-    # 4) GraphRAG search (with try/except degrade)
+    # ── 3.5) Environment fusion (FR-2.8, weight 0.1 default / 0.2 extreme) ──
+    # Always applied, not affected by user intent.
+    env_meta: dict | None = None
+    _has_env = any([
+        input_data.season, input_data.time_of_day,
+        input_data.weather_code is not None, input_data.temperature is not None,
+    ])
+    if _has_env:
+        from app.services.environment import fuse_environment
+        fused_vector, env_meta = fuse_environment(
+            emotion_result["emotion_vector"],
+            season=input_data.season,
+            time_of_day=input_data.time_of_day,
+            weather_code=input_data.weather_code,
+            temperature=input_data.temperature,
+        )
+        emotion_result["emotion_vector"] = fused_vector
+        # Update primary_emotion and confidence after fusion
+        primary = max(DIMENSIONS, key=lambda d: fused_vector[d])
+        emotion_result["primary_emotion"] = EMOTION_LABELS[primary]
+        emotion_result["confidence"] = fused_vector[primary]
+        logger.debug(
+            "Environment fusion: season=%s time=%s weather=%s temp=%s weight=%.1f",
+            input_data.season, input_data.time_of_day,
+            input_data.weather_code, input_data.temperature,
+            env_meta.get("fusion_weight", 0) if env_meta else 0,
+        )
+
+    # 4) GraphRAG search (with Redis cache for card-preset hot paths)
     candidates: list[dict] = []
     search_source = "graphrag"  # Tracked for gen.complete metadata
-    try:
-        async for neo4j_session in get_db_neo4j():
-            candidates = await search_fragrance_by_emotion(
-                neo4j_session,
+    cache_hit = False
+    seed_notes = emotion_result.get("synesthesia_tokens") or None
+
+    # ── Cache eligibility: card-preset source + no synesthesia tokens ──
+    _cache_eligible = (
+        emotion_result["source"] in ("card_preset", "llm_text_keyword")
+        and not seed_notes
+    )
+    _cache_key: str | None = None
+    if _cache_eligible:
+        _cache_key = build_graphrag_cache_key(emotion_result["emotion_vector"], input_data.scene_tag)
+        cached = await get_cached_graphrag_result(_cache_key)
+        if cached is not None:
+            candidates = cached
+            search_source = "graphrag_cache"
+            cache_hit = True
+            logger.debug("GraphRAG cache hit key=%s candidates=%d", _cache_key, len(candidates))
+
+    if not cache_hit:
+        try:
+            async for neo4j_session in get_db_neo4j():
+                candidates = await search_fragrance_by_emotion(
+                    neo4j_session,
+                    emotion_result["emotion_vector"],
+                    input_data.scene_tag,
+                    limit=50,
+                    seed_notes=seed_notes,
+                    diversity=input_data.diversity,  # FR-3.8
+                )
+        except (Neo4jError, ServiceUnavailable, SessionExpired, OSError) as e:
+            # Neo4j down → degrade to PG fragrance_templates or hardcoded classics
+            logger.warning("GraphRAG search degraded (gen_id=%s): %s", generation_id, e)
+            search_source = "degraded_backup"
+            candidates = await search_fallback_fragrances(
                 emotion_result["emotion_vector"],
                 input_data.scene_tag,
-                limit=50,
-                seed_notes=emotion_result.get("synesthesia_tokens") or None,
+                limit=10,
             )
-    except (Neo4jError, ServiceUnavailable, SessionExpired, OSError) as e:
-        # Neo4j down → degrade to PG fragrance_templates or hardcoded classics
-        logger.warning("GraphRAG search degraded (gen_id=%s): %s", generation_id, e)
-        search_source = "degraded_backup"
-        candidates = await search_fallback_fragrances(
-            emotion_result["emotion_vector"],
-            input_data.scene_tag,
-            limit=10,
-        )
-        # Note: NOT yielding gen.error here — the pipeline continues
-        # successfully with fallback data. Fallback flag is reported in
-        # gen.complete metadata so the frontend can show a subtle notice
-        # without treating it as a terminal error.
+            # Note: NOT yielding gen.error here — the pipeline continues
+            # successfully with fallback data. Fallback flag is reported in
+            # gen.complete metadata so the frontend can show a subtle notice
+            # without treating it as a terminal error.
 
-    if not candidates:
-        # No GraphRAG matches → generic gift Top 5
-        search_source = "generic_top5"
-        candidates = await search_fallback_fragrances(
-            emotion_result["emotion_vector"],
-            input_data.scene_tag,
-            limit=5,
-        )
-        # Same as above: pipeline continues, fallback source in gen.complete metadata
+        if not candidates:
+            # No GraphRAG matches → generic gift Top 5
+            search_source = "generic_top5"
+            candidates = await search_fallback_fragrances(
+                emotion_result["emotion_vector"],
+                input_data.scene_tag,
+                limit=5,
+            )
+            # Same as above: pipeline continues, fallback source in gen.complete metadata
+
+        # Write successful GraphRAG results to cache for future requests
+        if _cache_eligible and _cache_key and candidates and search_source == "graphrag":
+            await cache_graphrag_result(_cache_key, candidates)
 
     for _hb in _drain_heartbeats():
         yield _hb
@@ -466,6 +521,7 @@ async def sse_event_stream(
     skeletons = build_skeleton(
         candidates, emotion_result["emotion_vector"], input_data.allergens,
         intent=intent_result["intent"],
+        diversity=input_data.diversity,  # FR-3.8
     )
     yield sse("gen.skeleton", {
         "generation_id": generation_id,
@@ -562,6 +618,11 @@ async def sse_event_stream(
             "mode": "fast",
             "emotion": emotion_result["primary_emotion"],
             "search_source": search_source,
+            "cache_hit": cache_hit,
+            "environment": env_meta,
+            "diversity_mode": input_data.diversity > 0,
+            "diversity_level": input_data.diversity,
+            "cross_style": input_data.diversity >= 0.5,
         },
     })
 

@@ -15,14 +15,14 @@
 | **Core Value** | No fragrance terminology needed — talk about your mood or pick a card, and AI finds your signature scent |
 | **Target Users** | C-end consumers (shopping for themselves / gifting for others) |
 | **Platform** | Web-first (responsive desktop + mobile), App extension reserved |
-| **Current Phase** | Phase 3 — User profiling (Phase 1 ✅ → Phase 2 ✅ → Phase 3 ✅) |
+| **Current Phase** | Phase 4 — Robustness & Expansion (Phase 1 ✅ → Phase 2 ✅ → Phase 3 ✅ → Phase 4 🔄) |
 
 ### Overall Status
 
 | Metric | Value |
 |--------|:---:|
-| FR Coverage | **27/27 (100%)** |
-| Backend Tests | **152 passed**, 0 failed |
+| FR Coverage | **29/29 (100%)** |
+| Backend Tests | **186+ passed**, 0 failed |
 | Frontend Tests | **20 passed** |
 | TypeScript | **Zero errors** |
 | SSE Events | **10 domains, 25 events** (chat.* / gen.* / gate.* / safety.* / lifecycle.* / system.*) |

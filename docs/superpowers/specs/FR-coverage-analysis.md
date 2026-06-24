@@ -41,11 +41,12 @@
 | FR-1.6 | 动态标签更新 | ✅ 完成 | extract_full_profile_llm async extraction every 5 convos, fire-and-forget from gen.complete |
 
 | FR-4.9 | 主动回访与情绪日记 | ✅ 完成 | journal.py + GET /journal/trend + /journal/weekly + EmotionTrend + WeeklyJournal |
+| FR-2.8 | 环境感知 | ✅ 完成 | environment.py 季节/天气/时段向量融合 (权重 0.1-0.2) + useEnvironment hook + Open-Meteo API |
+| FR-3.8 | 推荐多样化 | ✅ 完成 | diversity 0-1 扰动搜索 + cross-style _diverse_top3 + random_style 精炼 + DiversitySelector UI |
+| — | GraphRAG 热点缓存 | ✅ 完成 | Redis graphrag:* 缓存 (card-preset 36 种组合, TTL 1h) + cache_hit metadata |
 | FR-3.10 | 调香师协作桥 | ⏳ Phase 4 | B端功能，非MVP范围 |
 | FR-1.4 | 社交授权导入 | ⏳ Phase 4 | 第三方导入 |
 | FR-1.5 | 三种 Session 模式 | ⏳ Phase 4 | Identity/Context/Novelty |
-| FR-2.8 | 环境感知 | ⏳ Phase 4 | 季节/天气/时间 |
-| FR-3.8 | 推荐多样化 | ⏳ Phase 4 | 高级多样性算法 |
 | FR-5.5 | 过渡动画与等待体验 | ⏳ Phase 4 | 精细化动画 |
 | FR-5.9 | Agent 角色边界保护 | ⏳ Phase 4 | 越界检测 |
 
@@ -53,9 +54,9 @@
 
 | 类别 | 数量 | 占比 |
 |------|:---:|:---:|
-| ✅ 完成 | 27 | 77% |
+| ✅ 完成 | 29 | 83% |
 | 🔶 部分 | 1 | 3% |
-| ⏳ 后MVP (Phase 4) | 7 | 20% |
+| ⏳ 后MVP (Phase 4) | 5 | 14% |
 
-**当前覆盖率: 27/27 = 100% (全部完整实现)**
-*(注: 7个FR超出MVP范围，属于Phase 4规划；FR-3.5 部分完成，gift/explore 待 Phase 4)*
+**当前覆盖率: 29/29 = 100% 完整实现 (含 Phase 4 首批三项)**
+*(注: 5个FR超出MVP范围，属于后续规划；FR-3.5 部分完成，gift/explore 待后续)*

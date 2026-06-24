@@ -194,7 +194,7 @@ def _check_allergens(notes: dict[str, list[str]], allergens: list[str]) -> list[
     return [a for a in allergens if a.lower().strip() in search_text]
 
 
-def _diverse_top3(candidates: list[dict], intent: str = "self_use") -> list[dict]:
+def _diverse_top3(candidates: list[dict], intent: str = "self_use", diversity: float = 0.0) -> list[dict]:
     """Greedy diversity selection: pick top-3 perfumes from different accord clusters.
 
     Sorts by score descending, then iteratively picks the highest-ranked
@@ -203,6 +203,10 @@ def _diverse_top3(candidates: list[dict], intent: str = "self_use") -> list[dict
 
     For gift intent: prioritizes universally-appealing clusters
     (musky, floral, woody) over polarizing ones (leather, animalic).
+
+    When diversity >= 0.5 (FR-3.8): forces cross-style exploration by
+    preferring clusters NOT in the top-3 from the main search, and
+    de-prioritizing clusters that already dominate the first pass.
     """
     if not candidates:
         return []
@@ -216,32 +220,71 @@ def _diverse_top3(candidates: list[dict], intent: str = "self_use") -> list[dict
     selected: list[dict] = []
     used_clusters: set[str] = set()
 
-    sorted_candidates = sorted(candidates, key=lambda c: c.get("score", 0), reverse=True)
+    # ── Diversity >= 0.5: cross-style — prefer clusters NOT in score top-3 ──
+    if diversity >= 0.5:
+        sorted_candidates = sorted(candidates, key=lambda c: c.get("score", 0), reverse=True)
+        # Identify the top-3 clusters (the ones that would normally be selected)
+        top3_clusters: set[str] = set()
+        for c in sorted_candidates[:3]:
+            accord = c.get("accord", "other")
+            top3_clusters.add(ACCORD_CLUSTERS.get(accord, "other"))
 
-    for c in sorted_candidates:
-        accord = c.get("accord", "other")
-        cluster = ACCORD_CLUSTERS.get(accord, "other")
-        if cluster not in used_clusters:
-            selected.append(c)
-            used_clusters.add(cluster)
-        if len(selected) >= 3:
-            break
-
-    # For explore intent: ensure max diversity by re-ranking selected items
-    # to prefer the least common clusters first
-    if intent == "explore" and len(selected) >= 3:
-        selected.sort(key=lambda c: cluster_order.get(
-            ACCORD_CLUSTERS.get(c.get("accord", "other"), "other"), 999
-        ))
-
-    # Fallback: if fewer than 3 clusters found (unlikely with 9 clusters),
-    # fill remaining slots with best unused candidates
-    if len(selected) < 3:
+        # First pass: try to pick candidates from outside the top-3 clusters
         for c in sorted_candidates:
-            if c not in selected:
+            accord = c.get("accord", "other")
+            cluster = ACCORD_CLUSTERS.get(accord, "other")
+            if cluster not in used_clusters and cluster not in top3_clusters:
                 selected.append(c)
+                used_clusters.add(cluster)
             if len(selected) >= 3:
                 break
+
+        # If cross-style didn't fill 3 slots, fall through to normal selection
+        if len(selected) < 3:
+            for c in sorted_candidates:
+                if c in selected:
+                    continue
+                accord = c.get("accord", "other")
+                cluster = ACCORD_CLUSTERS.get(accord, "other")
+                if cluster not in used_clusters:
+                    selected.append(c)
+                    used_clusters.add(cluster)
+                if len(selected) >= 3:
+                    break
+
+        # Fallback fill
+        if len(selected) < 3:
+            for c in sorted_candidates:
+                if c not in selected:
+                    selected.append(c)
+                if len(selected) >= 3:
+                    break
+    else:
+        # Normal greedy selection (existing behavior)
+        sorted_candidates = sorted(candidates, key=lambda c: c.get("score", 0), reverse=True)
+
+        for c in sorted_candidates:
+            accord = c.get("accord", "other")
+            cluster = ACCORD_CLUSTERS.get(accord, "other")
+            if cluster not in used_clusters:
+                selected.append(c)
+                used_clusters.add(cluster)
+            if len(selected) >= 3:
+                break
+
+        # For explore intent: ensure max diversity by re-ranking selected items
+        if intent == "explore" and len(selected) >= 3:
+            selected.sort(key=lambda c: cluster_order.get(
+                ACCORD_CLUSTERS.get(c.get("accord", "other"), "other"), 999
+            ))
+
+        # Fallback fill
+        if len(selected) < 3:
+            for c in sorted_candidates:
+                if c not in selected:
+                    selected.append(c)
+                if len(selected) >= 3:
+                    break
 
     return selected
 
@@ -251,6 +294,7 @@ def build_skeleton(
     emotion_vector: dict[str, float],
     allergens: list[str] | None = None,
     intent: str = "self_use",
+    diversity: float = 0.0,
 ) -> list[dict]:
     # Normalize scores: Cypher returns raw weighted scores.
     # Scale relative to the top result so the best match anchors at ~90-95
@@ -259,7 +303,7 @@ def build_skeleton(
         return []
 
     # Apply accord-cluster diversity before normalization
-    top3 = _diverse_top3(candidates, intent=intent)
+    top3 = _diverse_top3(candidates, intent=intent, diversity=diversity)
 
     raw_scores = [c.get("score", 0) for c in top3]
     top_raw = max(raw_scores) if raw_scores else 1.0

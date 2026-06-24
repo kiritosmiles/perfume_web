@@ -56,6 +56,7 @@ async def search_fragrance_by_emotion(
     scene_tag: str | None = None,
     limit: int = 50,
     seed_notes: list[str] | None = None,
+    diversity: float = 0.0,
 ) -> list[dict]:
     """Search perfumes by weighted multi-emotion→accord→perfume path scoring.
 
@@ -70,6 +71,11 @@ async def search_fragrance_by_emotion(
     Seed notes (if provided, from synesthesia decoding) add a +0.15 bonus
     per matching note name in the perfume, steering results toward the
     decoded sensory concepts.
+
+    Diversity (FR-3.8, 0-1): when > 0, runs a second query with a perturbed
+    emotion vector that boosts the bottom-3 dimensions to surface perfumes
+    from different accord clusters. Results from both queries are merged.
+    diversity >= 0.5 triggers cross-style exploration.
     """
     query = """
         UNWIND $emotions AS ed
@@ -124,7 +130,99 @@ async def search_fragrance_by_emotion(
     if seed_notes and records:
         records = _apply_seed_note_boost(records, seed_notes)
 
+    # ── Diversity: perturbed second-pass search (FR-3.8) ─────────────────
+    if diversity > 0 and records:
+        records = await _diversity_merge(
+            session, records, emotion_vector, scene_tag, limit,
+            seed_notes, diversity, query,
+        )
+
     return records
+
+
+async def _diversity_merge(
+    session: AsyncSession,
+    main_results: list[dict],
+    emotion_vector: dict[str, float],
+    scene_tag: str | None,
+    limit: int,
+    seed_notes: list[str] | None,
+    diversity: float,
+    query: str,
+) -> list[dict]:
+    """Run a perturbed second query and merge with main results.
+
+    Perturbation: boost bottom-3 dimensions by diversity * 0.3,
+    reduce top dimension by diversity * 0.2, then re-normalize.
+    Results are interleaved to maintain some relevance while
+    introducing diversity.
+    """
+    import copy
+
+    sorted_dims = sorted(emotion_vector.items(), key=lambda x: x[1])
+    bottom_n = min(3, len(sorted_dims))
+    bottom_keys = [d for d, _ in sorted_dims[:bottom_n]]
+    top_key = sorted_dims[-1][0]
+
+    perturbed = copy.deepcopy(emotion_vector)
+    for k in bottom_keys:
+        perturbed[k] = min(1.0, perturbed[k] + diversity * 0.3)
+    perturbed[top_key] = max(0.0, perturbed[top_key] - diversity * 0.2)
+
+    # Renormalize
+    total = sum(perturbed.values())
+    if total > 0:
+        perturbed = {k: v / total for k, v in perturbed.items()}
+
+    perturbed_param: list[dict] = [
+        {"name": name, "weight": max(weight or 0.0, 0.05)}
+        for name, weight in perturbed.items()
+    ]
+
+    try:
+        result = await session.run(
+            query,
+            emotions=perturbed_param,
+            scene_tag=scene_tag or "",
+            limit=limit,
+            timeout=3.0,
+        )
+        perturbed_records = await result.data()
+
+        if seed_notes and perturbed_records:
+            perturbed_records = _apply_seed_note_boost(perturbed_records, seed_notes)
+
+        # Merge: interleave top-N from main with top-N from perturbed, dedupe
+        main_names: set[str] = set()
+        merged: list[dict] = []
+        main_cut = limit // 2
+        pert_cut = limit // 2
+
+        for r in main_results[:main_cut]:
+            name = r.get("name", "")
+            if name not in main_names:
+                main_names.add(name)
+                merged.append(r)
+
+        for r in perturbed_records[:pert_cut]:
+            name = r.get("name", "")
+            if name not in main_names:
+                main_names.add(name)
+                merged.append(r)
+
+        # Fill remaining slots from main results
+        for r in main_results[main_cut:]:
+            if len(merged) >= limit:
+                break
+            name = r.get("name", "")
+            if name not in main_names:
+                main_names.add(name)
+                merged.append(r)
+
+        return merged[:limit]
+    except Exception:
+        # Perturbed query failed → return main results (graceful degradation)
+        return main_results
 
 
 def _apply_seed_note_boost(

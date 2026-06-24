@@ -14,6 +14,12 @@ class GuestSessionInput(BaseModel):
     refine: str | None = None
     gate_answer: str | None = None
     intent: Literal["self_use", "gift", "explore"] = "self_use"
+    # ── Environment perception (FR-2.8, all optional, backward-compatible) ──
+    season: str | None = None  # spring|summer|autumn|winter
+    time_of_day: str | None = None  # morning|afternoon|evening|night
+    weather_code: int | None = None  # WMO weather code
+    temperature: float | None = None  # Celsius
+    diversity: float = 0.0  # FR-3.8: 0-1 diversity control
 
     @model_validator(mode="after")
     def validate_has_input(self):

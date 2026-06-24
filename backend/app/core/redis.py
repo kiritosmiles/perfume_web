@@ -3,6 +3,7 @@
 Uses redis.asyncio for non-blocking Redis operations from FastAPI async handlers.
 """
 
+import json
 import logging
 from typing import Any
 
@@ -186,6 +187,74 @@ async def update_l1_text(session_id: str, round_num: int, text: str) -> None:
 async def get_l1_texts(session_id: str) -> list[str]:
     frags = await get_l1_fragments(session_id)
     return [f["text"] for f in frags if f.get("text")]
+
+
+# ── GraphRAG result cache (hot-path, card-preset only) ─────────────────────────
+
+GRAPHRAG_CACHE_TTL = 3600  # 1 hour
+
+
+def build_graphrag_cache_key(emotion_vector: dict[str, float], scene_tag: str | None) -> str:
+    """Build a deterministic cache key from emotion vector + scene tag.
+
+    Dimensions are sorted alphabetically for consistency regardless of dict
+    insertion order. Tiny values (≤0.05) are dropped to prevent key explosion
+    from float noise after normalization.
+    """
+    sorted_dims = sorted(emotion_vector.items())
+    vec_part = "+".join(
+        f"{k}:{v:.3f}" for k, v in sorted_dims if v > 0.05
+    )
+    scene = scene_tag or "none"
+    return f"graphrag:{vec_part}:{scene}"
+
+
+async def cache_graphrag_result(key: str, candidates: list[dict], ttl: int = GRAPHRAG_CACHE_TTL) -> None:
+    """Cache GraphRAG search results keyed by build_graphrag_cache_key output.
+
+    Gracefully does nothing if Redis is not initialized.
+    """
+    r = _get_client()
+    if r is None:
+        return
+    try:
+        await r.set(key, json.dumps(candidates, ensure_ascii=False), ex=ttl)
+    except Exception:
+        logger.debug("GraphRAG cache write failed key=%s", key, exc_info=True)
+
+
+async def get_cached_graphrag_result(key: str) -> list[dict] | None:
+    """Retrieve cached GraphRAG candidates. Returns None on miss or Redis unavailable."""
+    r = _get_client()
+    if r is None:
+        return None
+    try:
+        raw = await r.get(key)
+        if raw is None:
+            return None
+        return json.loads(raw)
+    except Exception:
+        logger.debug("GraphRAG cache read failed key=%s", key, exc_info=True)
+        return None
+
+
+async def invalidate_graphrag_cache(pattern: str = "*") -> None:
+    """Delete cached GraphRAG results matching a glob pattern.
+
+    pattern="*" (default) clears all GraphRAG cache entries.
+    pattern="joy*" clears entries with primary emotion = joy.
+    No-op if Redis is unavailable.
+    """
+    r = _get_client()
+    if r is None:
+        return
+    try:
+        full_pattern = f"graphrag:{pattern}"
+        keys = await r.keys(full_pattern)
+        if keys:
+            await r.delete(*keys)
+    except Exception:
+        logger.debug("GraphRAG cache invalidation failed pattern=%s", pattern, exc_info=True)
 
 
 # ── Health check ──────────────────────────────────────────────────────────────

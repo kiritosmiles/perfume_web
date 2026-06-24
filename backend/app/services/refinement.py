@@ -3,7 +3,13 @@
 Maps user refinement keywords (e.g. "sweeter", "fresher") to emotion vector
 adjustments. The adjusted vector is re-normalized to [0,1] and fed back into
 the GraphRAG query as a new SSE session with the `refine` param.
+
+FR-3.8: "random_style" is a special keyword that applies non-deterministic
+perturbations — boosting 2 random non-primary dimensions to break out of
+local optima.
 """
+
+import random
 
 REFINEMENT_RULES: dict[str, dict[str, float]] = {
     # ── 甜度 (Sweetness) ─────────────────────────
@@ -65,7 +71,22 @@ def apply_refinement(
 
     for kw in refine_keywords:
         kw_clean = kw.strip().lower().replace(" ", "_")
-        if kw_clean in REFINEMENT_RULES:
+
+        # ── random_style: non-deterministic cross-style exploration (FR-3.8) ──
+        if kw_clean == "random_style":
+            # Pick 2 random dimensions (excluding the current top-2) and boost them
+            ranked = sorted(adjusted.items(), key=lambda x: x[1], reverse=True)
+            top2 = {ranked[0][0], ranked[1][0]}
+            eligible = [d for d in DIMENSION_NAMES if d not in top2]
+            if len(eligible) >= 2:
+                chosen = random.sample(eligible, 2)
+            elif eligible:
+                chosen = eligible
+            else:
+                chosen = random.sample(DIMENSION_NAMES, 2)
+            for dim in chosen:
+                adjusted[dim] = max(0.0, min(1.0, adjusted.get(dim, 0.0) + 0.25))
+        elif kw_clean in REFINEMENT_RULES:
             for dim, delta in REFINEMENT_RULES[kw_clean].items():
                 if dim in adjusted:
                     adjusted[dim] = max(0.0, min(1.0, adjusted[dim] + delta))

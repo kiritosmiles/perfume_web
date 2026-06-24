@@ -15,6 +15,7 @@ import { NoteCard } from "../notes/NoteCard";
 import { ExportButton } from "../notes/ExportButton";
 import { GateQuestionBanner } from "../chat/GateQuestionBanner";
 import { useSSE } from "../../hooks/useSSE";
+import { useEnvironment, formatEnvironmentLabel, type EnvironmentData } from "../../hooks/useEnvironment";
 import { useImplicitTracking } from "../../hooks/useImplicitTracking";
 import { useSessionStore } from "../../stores/sessionStore";
 import { useGenerationStore } from "../../stores/generationStore";
@@ -35,6 +36,8 @@ interface RecommendationFlowProps {
     freeText: string;
     sceneTag: string;
     intent: "self_use" | "gift" | "explore";
+    environment: EnvironmentData;
+    diversity: number;
   }) => string | null;
   quotaInfo?: QuotaInfo;
   onQuotaExhausted?: () => void;
@@ -56,6 +59,10 @@ export function RecommendationFlow({
   const [sseUrl, setSseUrl] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
+  // ── Environment perception (FR-2.8) ──
+  const { env, enabled: envEnabled, setEnabled: setEnvEnabled } = useEnvironment();
+  // ── Diversity (FR-3.8) ──
+  const [diversity, setDiversity] = useState(0);
 
   const emotion = useSessionStore((s) => s.emotion);
   const sseStatus = useSessionStore((s) => s.sseStatus);
@@ -91,7 +98,14 @@ export function RecommendationFlow({
 
   const handleStart = () => {
     if (!canStart) return;
-    const url = getSSEUrl({ cardIds, freeText: freeText.trim(), sceneTag, intent });
+    const url = getSSEUrl({
+      cardIds,
+      freeText: freeText.trim(),
+      sceneTag,
+      intent,
+      environment: envEnabled ? env : { season: null, time_of_day: null, weather_code: null, temperature: null, weather_label: null, weather_emoji: null },
+      diversity,
+    });
     if (!url) {
       onQuotaExhausted?.();
       return;
@@ -151,11 +165,21 @@ export function RecommendationFlow({
     }
   };
 
+  const _buildBaseUrl = () => {
+    return getSSEUrl({
+      cardIds,
+      freeText: freeText.trim(),
+      sceneTag,
+      intent,
+      environment: envEnabled ? env : { season: null, time_of_day: null, weather_code: null, temperature: null, weather_label: null, weather_emoji: null },
+      diversity,
+    });
+  };
+
   const handleRefine = (key: string) => {
     close();
     setSseUrl(null);
-    // Rebuild the same URL but append the refine param
-    const baseUrl = getSSEUrl({ cardIds, freeText: freeText.trim(), sceneTag, intent });
+    const baseUrl = _buildBaseUrl();
     if (!baseUrl) return;
     const allergens = localStorage.getItem("perfume_allergens") || "";
     let refineUrl = `${baseUrl}&refine=${encodeURIComponent(key)}`;
@@ -167,7 +191,7 @@ export function RecommendationFlow({
   const handleGateAnswer = (answer: string) => {
     close();
     setSseUrl(null);
-    const baseUrl = getSSEUrl({ cardIds, freeText: freeText.trim(), sceneTag, intent });
+    const baseUrl = _buildBaseUrl();
     if (!baseUrl) return;
     const allergens = localStorage.getItem("perfume_allergens") || "";
     let gateUrl = `${baseUrl}&gate_answer=${encodeURIComponent(answer)}`;
@@ -339,6 +363,49 @@ export function RecommendationFlow({
                   selected={[sceneTag]}
                   onToggle={handleToggleScene}
                 />
+              </div>
+            </div>
+
+            {/* Environment indicator (FR-2.8) */}
+            {envEnabled && (env.season || env.time_of_day || env.temperature !== null) && (
+              <div className="flex items-center justify-center gap-2 text-xs text-stone-400">
+                <span>{formatEnvironmentLabel(env)}</span>
+                <button
+                  onClick={() => setEnvEnabled(false)}
+                  className="text-stone-300 hover:text-stone-500 transition-colors"
+                  title="关闭环境感知"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* Diversity selector (FR-3.8) */}
+            <div>
+              <p className="text-xs text-stone-400 text-center mb-2 font-medium uppercase tracking-wider">
+                Style
+              </p>
+              <div className="flex justify-center gap-2">
+                {[
+                  { value: 0, label: "🎯 精准匹配" },
+                  { value: 0.3, label: "⚖️ 均衡" },
+                  { value: 0.6, label: "🎲 惊喜探索" },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => {
+                      setDiversity(opt.value);
+                      track("diversity_changed", { level: opt.value });
+                    }}
+                    className={`px-3 py-1.5 text-xs rounded-full transition-all
+                      ${diversity === opt.value
+                        ? "bg-stone-800 text-white shadow-sm"
+                        : "bg-stone-200/50 text-stone-500 hover:bg-stone-200"
+                      }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
               </div>
             </div>
           </motion.div>

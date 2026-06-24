@@ -110,6 +110,13 @@ async def start_guest_session_get(
     refine: str = Query(default="", description="Refinement keyword for rule-based re-ranking"),
     gate_answer: str = Query(default="", description="User answer to Agent Gate questions"),
     intent: str = Query(default="self_use", description="User intent: self_use, gift, explore"),
+    # Environment perception (FR-2.8, all optional)
+    season: str = Query(default="", description="Current season: spring|summer|autumn|winter"),
+    time_of_day: str = Query(default="", description="Time of day: morning|afternoon|evening|night"),
+    weather_code: str = Query(default="", description="WMO weather code"),
+    temperature: str = Query(default="", description="Current temperature in Celsius"),
+    # Diversity (FR-3.8)
+    diversity: str = Query(default="0.0", description="Diversity level 0-1"),
 ):
     # Rate limit (TRD §6.2: 120 GET/min)
     if not await rate_limit_guest(request):
@@ -139,6 +146,11 @@ async def start_guest_session_get(
         logger.info("Guest attempted non-self_use intent=%s, forcing self_use", intent_val)
         intent_val = "self_use"
     gate_answer_val = gate_answer.strip() or None
+    season_val = season.strip() or None
+    time_of_day_val = time_of_day.strip() or None
+    weather_code_val = int(weather_code) if weather_code.strip() else None
+    temp_val = float(temperature) if temperature.strip() else None
+    diversity_val = float(diversity) if diversity.strip() else 0.0
     input_data = GuestSessionInput(
         emotion_card_ids=card_list,
         scene_tag=scene or None,
@@ -147,6 +159,11 @@ async def start_guest_session_get(
         allergens=allergens_list or None,
         refine=refine_val,
         gate_answer=gate_answer_val,
+        season=season_val,
+        time_of_day=time_of_day_val,
+        weather_code=weather_code_val,
+        temperature=temp_val,
+        diversity=diversity_val,
         intent="self_use",  # type: ignore[arg-type]  # always self_use for guests
     )
 
