@@ -424,6 +424,7 @@ async def sse_event_stream(
 
     # 4) GraphRAG search (with try/except degrade)
     candidates: list[dict] = []
+    search_source = "graphrag"  # Tracked for gen.complete metadata
     try:
         async for neo4j_session in get_db_neo4j():
             candidates = await search_fragrance_by_emotion(
@@ -436,33 +437,26 @@ async def sse_event_stream(
     except (Neo4jError, ServiceUnavailable, SessionExpired, OSError) as e:
         # Neo4j down → degrade to PG fragrance_templates or hardcoded classics
         logger.warning("GraphRAG search degraded (gen_id=%s): %s", generation_id, e)
+        search_source = "degraded_backup"
         candidates = await search_fallback_fragrances(
             emotion_result["emotion_vector"],
             input_data.scene_tag,
             limit=10,
         )
-        yield sse("gen.error", {
-            "generation_id": generation_id,
-            "code": "DEGRADED",
-            "user_message": "正在从备用知识库为你推荐经典香氛",
-            "degraded": True,
-        })
-        # Continue to normal pipeline with fallback candidates
+        # Note: NOT yielding gen.error here — the pipeline continues
+        # successfully with fallback data. Fallback flag is reported in
+        # gen.complete metadata so the frontend can show a subtle notice
+        # without treating it as a terminal error.
 
     if not candidates:
         # No GraphRAG matches → generic gift Top 5
+        search_source = "generic_top5"
         candidates = await search_fallback_fragrances(
             emotion_result["emotion_vector"],
             input_data.scene_tag,
             limit=5,
         )
-        yield sse("gen.error", {
-            "generation_id": generation_id,
-            "code": "GENERIC_FALLBACK",
-            "user_message": "为你推荐广受欢迎的经典香氛",
-            "degraded": False,
-        })
-        # Continue to normal pipeline with fallback candidates
+        # Same as above: pipeline continues, fallback source in gen.complete metadata
 
     for _hb in _drain_heartbeats():
         yield _hb
@@ -564,7 +558,11 @@ async def sse_event_stream(
     yield sse("gen.complete", {
         "generation_id": generation_id,
         "total_cards": len(skeletons),
-        "metadata": {"mode": "fast", "emotion": emotion_result["primary_emotion"]},
+        "metadata": {
+            "mode": "fast",
+            "emotion": emotion_result["primary_emotion"],
+            "search_source": search_source,
+        },
     })
 
     # ── L1 Async Consolidation (fire-and-forget, ~500ms) ─────────────────
