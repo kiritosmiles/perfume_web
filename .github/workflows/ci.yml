@@ -102,7 +102,7 @@ jobs:
     needs: [backend, frontend]
     services:
       postgres:
-        image: postgres:15-alpine
+        image: pgvector/pgvector:pg15
         env:
           POSTGRES_USER: perfume
           POSTGRES_PASSWORD: perfume_dev
