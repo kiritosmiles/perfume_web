@@ -22,7 +22,7 @@
 | Metric | Value |
 |--------|:---:|
 | FR Coverage | **27/27 (100%)** |
-| Backend Tests | **138 passed**, 0 failed |
+| Backend Tests | **152 passed**, 0 failed |
 | Frontend Tests | **20 passed** |
 | TypeScript | **Zero errors** |
 | SSE Events | **10 domains, 25 events** (chat.* / gen.* / gate.* / safety.* / lifecycle.* / system.*) |

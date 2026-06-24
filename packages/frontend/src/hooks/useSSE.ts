@@ -54,6 +54,7 @@ export function useSSE({ url }: UseSSEOptions) {
               primary_emotion: data.primary_emotion as string,
               confidence: data.confidence as number,
               source: data.source as string,
+              value_dimensions: data.value_dimensions as Record<string, number> | undefined,
             });
             break;
 

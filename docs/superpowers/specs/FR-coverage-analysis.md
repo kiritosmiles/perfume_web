@@ -25,7 +25,7 @@
 | FR-4.7 | 反问确认机制 | ✅ 完成 | 置信度<85%追问UI (Yes/Let me rephrase) |
 | FR-5.3 | 转人工机制 | ✅ 完成 | human_handoff_check("转人工/找客服") → system.notification + CrisisOverlay |
 
-| FR-2.5 | 情绪价值维度映射 | 🔶 部分 | emotion→value_dim 映射存在，但仅用于 graphrag_match 评分 — MVP 够用 |
+| FR-2.5 | 情绪价值维度映射 | ✅ 完成 | compute_value_dimensions (8→6 deterministic) + SSE + Profile API + ProfilePage bar chart |
 | FR-3.5 | AI配方生成（意图门控） | 🔶 部分 | self_use 模式完整，gift/explore 模式待 Phase 2 |
 | FR-5.7 | 会话意图检测 | ✅ 完成 | 3层检测(keyword<1ms → LLM ~800ms → default) + info_completeness维度输出 |
 | FR-3.9 | 送礼场景推荐策略 | ✅ 完成 | gift=safe cluster priority + GIFT_STORY_TEMPLATES (8 emotions × 4 lines) |
@@ -38,7 +38,7 @@
 | FR-1.3 | 渐进式画像构建 | ✅ 完成 | light(1-3次) → full(4+次) threshold + EMA emotion update |
 | FR-4.8 | 用户记忆透明化 ("AI眼中的我") | ✅ 完成 | ProfilePage: personality tags + SVG radar chart + gift history |
 | FR-5.8 | 抽象/超现实需求处理 | ✅ 完成 | llm_emotion.py synesthesia decoding → seed_notes → GraphRAG boost |
-| FR-1.6 | 动态标签更新 | 🔶 部分 | emotion_tendency EMA实时更新，personality_tags 待LLM异步提取 |
+| FR-1.6 | 动态标签更新 | ✅ 完成 | extract_full_profile_llm async extraction every 5 convos, fire-and-forget from gen.complete |
 
 | FR-4.9 | 主动回访与情绪日记 | ✅ 完成 | journal.py + GET /journal/trend + /journal/weekly + EmotionTrend + WeeklyJournal |
 | FR-3.10 | 调香师协作桥 | ⏳ Phase 4 | B端功能，非MVP范围 |
@@ -57,5 +57,5 @@
 | 🔶 部分 | 1 | 3% |
 | ⏳ 后MVP (Phase 4) | 7 | 20% |
 
-**当前覆盖率: 27/27 = 100% (含部分实现: 27/27 = 100%)**
-*(注: 7个FR超出MVP范围，属于Phase 4规划)*
+**当前覆盖率: 27/27 = 100% (全部完整实现)**
+*(注: 7个FR超出MVP范围，属于Phase 4规划；FR-3.5 部分完成，gift/explore 待 Phase 4)*

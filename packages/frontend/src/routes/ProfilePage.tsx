@@ -76,6 +76,38 @@ function RadarChart({ data }: { data: Record<string, number> }) {
   );
 }
 
+const VALUE_DIM_LABELS: Record<string, string> = {
+  pleasure: "愉悦度", activation: "激活度", dominance: "支配度",
+  social: "社交性", aesthetic: "审美性", nostalgia: "怀旧感",
+};
+const VALUE_DIM_ORDER = ["pleasure", "activation", "dominance", "social", "aesthetic", "nostalgia"];
+const VALUE_COLORS = ["#f59e0b", "#ef4444", "#8b5cf6", "#10b981", "#ec4899", "#f97316"];
+
+function ValueDimensionBars({ data }: { data: Record<string, number> }) {
+  return (
+    <div className="space-y-2">
+      {VALUE_DIM_ORDER.map((key, i) => {
+        const val = data[key] ?? 0;
+        return (
+          <div key={key} className="flex items-center gap-2">
+            <span className="text-xs text-stone-500 w-12 text-right">{VALUE_DIM_LABELS[key]}</span>
+            <div className="flex-1 h-3 bg-stone-100 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${Math.round(Math.min(Math.max(val, 0), 1) * 100)}%`,
+                  backgroundColor: VALUE_COLORS[i],
+                }}
+              />
+            </div>
+            <span className="text-xs text-stone-400 w-8">{Math.round(Math.min(Math.max(val, 0), 1) * 100)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function TrendLine({ data }: { data: Array<{ date: string; emotion: string; value: number }> }) {
   if (!data.length) {
     return <p className="text-sm text-stone-400 text-center py-8">对话次数还不够，多在几次推荐后就会看到趋势</p>;
@@ -110,7 +142,7 @@ function TrendLine({ data }: { data: Array<{ date: string; emotion: string; valu
 
 export function ProfilePage() {
   const navigate = useNavigate();
-  const { profile, conversationCount, loading, error, fetchProfile, submitOnboarding } = useProfileStore();
+  const { profile, conversationCount, loading, error, valueDimensions, fetchProfile, submitOnboarding } = useProfileStore();
   const isAuth = useAuthStore((s) => !!s.user);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
@@ -216,6 +248,21 @@ export function ProfilePage() {
                 <p className="text-sm text-stone-400 text-center py-8">完成首次对话后会显示情绪画像</p>
               )}
             </motion.div>
+
+            {/* Value dimensions bar chart (FR-2.5) */}
+            {valueDimensions && Object.keys(valueDimensions).length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+                className="glass-card p-5"
+              >
+                <h3 className="text-xs font-medium text-stone-400 uppercase tracking-wider mb-3">
+                  价值维度
+                </h3>
+                <ValueDimensionBars data={valueDimensions} />
+              </motion.div>
+            )}
 
             {/* Preferred accords */}
             {profile.preferred_accords.length > 0 && (

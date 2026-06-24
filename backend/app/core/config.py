@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "deepseek-chat"
     LLM_TIMEOUT: float = 8.0  # seconds — shared by emotion (2s) + copy (5s)
 
+    # Profile dynamic extraction (FR-1.6)
+    PROFILE_EXTRACTION_THROTTLE: int = 5  # Re-extract every N conversations
+
     # Memory (TiMem)
     BGE_MODEL_PATH: str = "BAAI/bge-small-zh"
     RECALL_TOP_K_L1: int = 20

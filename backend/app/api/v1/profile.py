@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.core.deps import get_current_user
+from app.services.emotion import compute_value_dimensions
 from app.services.profile import (
     get_user_profile,
     ensure_profile_exists,
@@ -34,11 +35,19 @@ async def api_get_profile(current_user: dict = Depends(get_current_user)):
     user_id = current_user["id"]
     await ensure_profile_exists(user_id)
     profile = await get_user_profile(user_id)
+    profile_data = profile["profile_data"] if profile else None
+
+    # Compute value dimensions from stored emotion tendency (FR-2.5)
+    value_dimensions = None
+    if profile_data and profile_data.get("emotion_tendency"):
+        value_dimensions = compute_value_dimensions(profile_data["emotion_tendency"])
+
     return {
         "user_id": user_id,
-        "profile": profile["profile_data"] if profile else None,
+        "profile": profile_data,
         "conversation_count": profile["conversation_count"] if profile else 0,
         "updated_at": profile["updated_at"] if profile else None,
+        "value_dimensions": value_dimensions,
     }
 
 

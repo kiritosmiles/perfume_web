@@ -2,7 +2,7 @@ import type { EmotionResult, RecommendationSkeleton } from "../types";
 
 export type SSEEvent =
   | { type: "chat.ack"; message_id: string; server_ts: string }
-  | { type: "chat.emotion"; emotion_vector: Record<string, number>; primary_emotion: string; confidence: number; source: EmotionResult["source"]; synesthesia_tokens?: string[] }
+  | { type: "chat.emotion"; emotion_vector: Record<string, number>; primary_emotion: string; confidence: number; source: EmotionResult["source"]; synesthesia_tokens?: string[]; value_dimensions?: Record<string, number> }
   | { type: "chat.recall"; generation_id: string; complexity: "simple" | "hybrid" | "complex"; recalled_count: number; memory_sources: ("l1" | "l2" | "l3")[]; latency_ms: number }
   | { type: "gen.start"; generation_id: string; mode: "fast" | "deep" }
   | { type: "gen.skeleton"; generation_id: string; recommendations: RecommendationSkeleton[]; is_partial: true; memory_context?: string }

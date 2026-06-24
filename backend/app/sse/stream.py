@@ -142,7 +142,7 @@ async def _update_user_profile(user_id: str, emotion_result: dict) -> None:
     """Update user profile after generation completes (fire-and-forget).
 
     Progressive: first 3 conversations only update emotion tendency;
-    conversation 4+ triggers full profile extraction.
+    conversation 4+ triggers full profile extraction (LLM, async).
     """
     try:
         from app.services.profile import (
@@ -150,14 +150,16 @@ async def _update_user_profile(user_id: str, emotion_result: dict) -> None:
             increment_conversation_count,
             update_emotion_tendency,
             should_extract_full_profile,
+            extract_full_profile_llm,
         )
         await ensure_profile_exists(user_id)
         count = await increment_conversation_count(user_id)
         await update_emotion_tendency(user_id, emotion_result["emotion_vector"])
         if await should_extract_full_profile(user_id):
             logger.debug("User %s reached full profile threshold (conv=%d)", user_id, count)
-            # Full profile extraction is deferred to cron/scheduler for now;
-            # emotion tendency and conversation count are updated inline.
+            # Fire-and-forget: LLM extraction runs asynchronously (FR-1.6).
+            # extract_full_profile_llm handles its own throttle + API-key checks.
+            asyncio.create_task(extract_full_profile_llm(user_id))
     except Exception:
         logger.warning("Profile update failed for user=%s", user_id, exc_info=True)
 
@@ -305,6 +307,7 @@ async def sse_event_stream(
         "confidence": emotion_result["confidence"],
         "source": emotion_result["source"],
         "synesthesia_tokens": emotion_result.get("synesthesia_tokens", []),
+        "value_dimensions": emotion_result.get("value_dimensions", {}),
     })
 
     # Persist user message for Phase 2 registration migration (guest only)
@@ -407,12 +410,14 @@ async def sse_event_stream(
         refine_keywords = [k.strip() for k in input_data.refine.split(",") if k.strip()]
         adjusted_vector = apply_refinement(emotion_result["emotion_vector"], refine_keywords)
         primary = max(_DIMS, key=lambda d: adjusted_vector[d])
-        from app.services.emotion import EMOTION_LABELS as _LABELS
+        from app.services.emotion import EMOTION_LABELS as _LABELS, compute_value_dimensions as _compute_vd
         emotion_result = {
             "emotion_vector": adjusted_vector,
             "primary_emotion": _LABELS[primary],
             "confidence": adjusted_vector[primary],
             "source": "refined",
+            "synesthesia_tokens": emotion_result.get("synesthesia_tokens", []),
+            "value_dimensions": _compute_vd(adjusted_vector),
         }
         _logger.debug("Refinement applied: keywords=%s → primary=%s conf=%.2f",
                        refine_keywords, emotion_result["primary_emotion"], emotion_result["confidence"])

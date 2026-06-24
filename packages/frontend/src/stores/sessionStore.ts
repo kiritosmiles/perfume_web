@@ -5,6 +5,7 @@ interface EmotionState {
   primary_emotion: string | null;
   confidence: number | null;
   source: "card_preset" | "bert" | "llm_fallback" | "llm_text" | null;
+  value_dimensions: Record<string, number> | null;
 }
 
 export type SessionIntent = "self_use" | "gift" | "explore";
@@ -34,6 +35,7 @@ interface SessionState {
     primary_emotion: string;
     confidence: number;
     source: string;
+    value_dimensions?: Record<string, number>;
   }) => void;
   setSSEStatus: (status: SessionState["sseStatus"]) => void;
   setAck: (acked: boolean) => void;
@@ -65,6 +67,7 @@ export const useSessionStore = create<SessionState>((set) => ({
         primary_emotion: emotion.primary_emotion,
         confidence: emotion.confidence,
         source: emotion.source as EmotionState["source"],
+        value_dimensions: emotion.value_dimensions || null,
       },
     }),
 

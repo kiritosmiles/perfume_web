@@ -21,6 +21,58 @@ EMOTION_LABEL_TO_KEY: dict[str, str] = {v: k for k, v in EMOTION_LABELS.items()}
 
 DIMENSIONS = ["joy", "sadness", "anxiety", "calm", "excitement", "nostalgia", "romance", "melancholy"]
 
+# FR-2.5: Six value dimensions — 愉悦度/激活度/支配度/社交性/审美性/怀旧感
+VALUE_DIMENSION_KEYS = ["pleasure", "activation", "dominance", "social", "aesthetic", "nostalgia"]
+VALUE_DIMENSION_LABELS: dict[str, str] = {
+    "pleasure": "愉悦度", "activation": "激活度", "dominance": "支配度",
+    "social": "社交性", "aesthetic": "审美性", "nostalgia": "怀旧感",
+}
+
+
+def compute_value_dimensions(emotion_vector: dict[str, float]) -> dict[str, float]:
+    """Map 8-dim emotion vector → 6-dim value dimensions (PRD FR-2.5).
+
+    Deterministic mathematical mapping — no LLM required.
+    All values clamped to [0, 1], rounded to 3 decimal places.
+    """
+    v = {d: float(emotion_vector.get(d, 0.0)) for d in DIMENSIONS}
+
+    pleasure = max(0.0, min(1.0, (
+        v["joy"] + v["excitement"] + v["romance"]
+        - v["sadness"] - v["anxiety"] - v["melancholy"]
+    ) / 3.0))
+
+    activation = max(0.0, min(1.0, (
+        v["excitement"] + v["anxiety"] - v["calm"] - v["melancholy"]
+    ) / 2.0))
+
+    dominance = max(0.0, min(1.0, (
+        v["calm"] + v["joy"] + v["excitement"]
+        - v["anxiety"] - v["sadness"] - v["melancholy"]
+    ) / 3.0))
+
+    social = max(0.0, min(1.0, (
+        v["excitement"] + v["romance"] + v["joy"]
+        - v["melancholy"] - v["sadness"]
+    ) / 3.0))
+
+    aesthetic = max(0.0, min(1.0, (
+        v["romance"] + v["nostalgia"] + v["calm"] + v["joy"]
+    ) / 2.0))
+
+    nostalgia = max(0.0, min(1.0, (
+        v["nostalgia"] + v["melancholy"] * 0.5 + v["calm"] * 0.3
+    )))
+
+    return {
+        "pleasure": round(pleasure, 3),
+        "activation": round(activation, 3),
+        "dominance": round(dominance, 3),
+        "social": round(social, 3),
+        "aesthetic": round(aesthetic, 3),
+        "nostalgia": round(nostalgia, 3),
+    }
+
 
 def resolve_emotion_from_cards(input_data: GuestSessionInput) -> dict:
     card_ids = input_data.emotion_card_ids
@@ -45,4 +97,5 @@ def resolve_emotion_from_cards(input_data: GuestSessionInput) -> dict:
         "primary_emotion": EMOTION_LABELS[primary],
         "confidence": merged[primary],
         "source": "card_preset",
+        "value_dimensions": compute_value_dimensions(merged),
     }

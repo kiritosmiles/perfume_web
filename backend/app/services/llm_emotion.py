@@ -16,7 +16,7 @@ import re as _re
 import httpx
 
 from app.core.config import settings
-from app.services.emotion import DIMENSIONS, EMOTION_LABELS, CARD_VECTORS
+from app.services.emotion import DIMENSIONS, EMOTION_LABELS, CARD_VECTORS, compute_value_dimensions
 
 logger = logging.getLogger(__name__)
 
@@ -274,6 +274,7 @@ async def resolve_emotion_from_text(
             "confidence": vector[primary_dim],
             "source": "llm_text",
             "synesthesia_tokens": synesthesia_tokens,
+            "value_dimensions": compute_value_dimensions(vector),
         }
 
     # Layer 2: Keyword fallback
@@ -286,6 +287,7 @@ async def resolve_emotion_from_text(
             "confidence": vector[primary_dim],
             "source": "card_preset",  # keyword fallback uses card vectors
             "synesthesia_tokens": synesthesia_tokens,
+            "value_dimensions": compute_value_dimensions(vector),
         }
 
     # Layer 3: Ultimate default
@@ -296,4 +298,5 @@ async def resolve_emotion_from_text(
         "confidence": 0.5,
         "source": "card_preset",
         "synesthesia_tokens": synesthesia_tokens,
+        "value_dimensions": compute_value_dimensions(default),
     }

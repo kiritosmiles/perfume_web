@@ -13,6 +13,7 @@ export interface ProfileData {
   }>;
   profile_level: "light" | "full";
   questionnaire_completed: boolean;
+  value_dimensions?: Record<string, number>;
 }
 
 interface ProfileState {
@@ -20,6 +21,7 @@ interface ProfileState {
   conversationCount: number;
   loading: boolean;
   error: string | null;
+  valueDimensions: Record<string, number> | null;
 
   fetchProfile: () => Promise<void>;
   submitOnboarding: (answers: OnboardingAnswer[]) => Promise<void>;
@@ -38,6 +40,7 @@ const initialState = {
   conversationCount: 0,
   loading: false,
   error: null,
+  valueDimensions: null,
 };
 
 export const useProfileStore = create<ProfileState>((set) => ({
@@ -47,9 +50,11 @@ export const useProfileStore = create<ProfileState>((set) => ({
     set({ loading: true, error: null });
     try {
       const data = await getProfile();
+      const profile = data.profile ? { ...(data.profile as unknown as ProfileData), value_dimensions: data.value_dimensions as Record<string, number> | undefined } : null;
       set({
-        profile: data.profile ? (data.profile as unknown as ProfileData) : null,
+        profile,
         conversationCount: data.conversation_count as number,
+        valueDimensions: (data.value_dimensions as Record<string, number>) || null,
         loading: false,
       });
     } catch (e) {

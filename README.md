@@ -22,13 +22,13 @@
 | 指标 | 数值 |
 |------|:---:|
 | FR 覆盖率 | **27/27 (100%)** |
-| 后端测试 | **138 passed**, 0 failed |
+| 后端测试 | **152 passed**, 0 failed |
 | 前端 vitest | **20 passed** |
 | TypeScript | **零错误** |
 | SSE 事件 | **10 域 25 事件** (chat.* / gen.* / gate.* / safety.* / lifecycle.* / system.*) |
 | 后端 API 端点 | **20 端点** (auth 4 + guest 2 + recommend 3 + config 2 + share 2 + memory 1 + feedback 2 + profile 2 + journal 2 + health 1) |
 | Neo4j 知识图谱 | **1,179 款香水 / 70 种香韵 / 74 条情绪→香韵边** |
-| LLM 管线 | **9 调用点** (emotion / intent / gate / copy × 3 / synesthesia / profile) |
+| LLM 管线 | **10 调用点** (emotion / intent / gate / copy × 3 / synesthesia / journal / profile_extraction) |
 
 > 剩余 7 项 FR 属于 Phase 4 规划（FR-3.10 调香师协作桥、FR-1.4 社交授权导入 等）。
 
