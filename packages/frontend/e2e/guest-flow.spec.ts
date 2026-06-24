@@ -83,7 +83,9 @@ test.describe("Guest Flow", () => {
     // Wait for "Share" button directly (only appears when generation reaches
     // "complete" phase). Don't wait for "New Session" first — the nav bar also
     // contains that text and would give a false-positive too early.
-    await expect(page.locator("text=Share")).toBeVisible({
+    // Multiple Share buttons exist (3 per card in ActionBar + 1 bottom bar).
+    // Use .first() to avoid Playwright strict-mode and just verify visibility.
+    await expect(page.locator("text=Share").first()).toBeVisible({
       timeout: 30000,
     });
     await expect(page.locator("text=Save as Note")).toBeVisible();
