@@ -41,8 +41,11 @@ test.describe("Guest Flow", () => {
     await textarea.fill("I feel very happy and excited today");
 
     await page.locator("button:has-text('Start Exploring')").click();
+    // Text-based emotion resolution goes through LLM→keyword→default chain.
+    // In CI (no LLM key) the keyword fallback is fast but the async pipeline
+    // adds latency; use a generous timeout.
     await expect(page.locator("text=I sense you're feeling")).toBeVisible({
-      timeout: 15000,
+      timeout: 25000,
     });
   });
 
@@ -77,12 +80,12 @@ test.describe("Guest Flow", () => {
     await page.locator("[data-emotion-id='joy']").click();
     await page.locator("button:has-text('Start Exploring')").click();
 
-    // Wait for generation to complete
-    await expect(page.locator("text=New Session")).toBeVisible({
+    // Wait for "Share" button directly (only appears when generation reaches
+    // "complete" phase). Don't wait for "New Session" first — the nav bar also
+    // contains that text and would give a false-positive too early.
+    await expect(page.locator("text=Share")).toBeVisible({
       timeout: 30000,
     });
-
-    await expect(page.locator("text=Share")).toBeVisible();
     await expect(page.locator("text=Save as Note")).toBeVisible();
   });
 

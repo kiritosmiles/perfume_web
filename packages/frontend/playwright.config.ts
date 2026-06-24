@@ -5,6 +5,7 @@ export default defineConfig({
   timeout: 60000,
   expect: { timeout: 10000 },
   retries: process.env.CI ? 1 : 0,
+  workers: process.env.CI ? 1 : undefined,  // Serial in CI to avoid backend contention
   use: {
     baseURL: "http://localhost:5173",
     trace: "on-first-retry",
