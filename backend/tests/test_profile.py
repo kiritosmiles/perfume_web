@@ -223,7 +223,7 @@ class TestProfileExtraction:
             mock_settings.LLM_TIMEOUT = 8.0
             with patch('httpx.AsyncClient.post', new_callable=AsyncMock) as mock_post:
                 mock_post.return_value = mock_response
-                with patch('app.services.profile.get_l3_summaries', new_callable=AsyncMock) as mock_l3:
+                with patch('app.services.memory.get_l3_summaries', new_callable=AsyncMock) as mock_l3:
                     mock_l3.return_value = ["用户喜欢清新的花香调香水"]
                     result = await extract_full_profile_llm(uid)
                     assert result is not None
@@ -259,7 +259,7 @@ class TestProfileExtraction:
     async def test_empty_memory_no_crash(self):
         """get_recent_memory_for_extraction should handle empty L3 gracefully."""
         uid = await _create_user()
-        with patch('app.services.profile.get_l3_summaries', new_callable=AsyncMock) as mock_l3:
+        with patch('app.services.memory.get_l3_summaries', new_callable=AsyncMock) as mock_l3:
             mock_l3.return_value = []
             result = await get_recent_memory_for_extraction(uid)
             assert "暂无" in result or len(result) > 0
