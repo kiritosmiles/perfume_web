@@ -178,7 +178,7 @@ jobs:
       - name: Create test share link
         working-directory: backend
         run: |
-          SHARE_ID=$(poetry run python -c "
+          cat > /tmp/create_share.py << 'PYEOF'
           import asyncio, secrets, string, json
           async def main():
               from app.core.pg import init_pg_pool, get_pg_pool
@@ -191,12 +191,13 @@ jobs:
               })
               async with pool.acquire() as conn:
                   await conn.execute(
-                      'INSERT INTO share_links (id, payload, expires_at) VALUES (\$1, \$2, NOW() + INTERVAL ''7 days'')',
+                      "INSERT INTO share_links (id, payload, expires_at) VALUES ($1, $2, NOW() + INTERVAL '7 days')",
                       sid, payload
                   )
               print(sid)
           asyncio.run(main())
-          ")
+          PYEOF
+          SHARE_ID=$(poetry run python /tmp/create_share.py)
           echo "TEST_SHARE_ID=$SHARE_ID" >> $GITHUB_ENV
         env:
           DB_HOST: localhost
