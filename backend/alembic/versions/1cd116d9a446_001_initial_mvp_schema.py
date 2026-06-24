@@ -49,16 +49,17 @@ def upgrade() -> None:
             vector JSONB NOT NULL
         )
     """)
+    # NOTE: \: escapes are required because SQLAlchemy text() interprets :name as bind params
     op.execute("""
         INSERT INTO emotion_cards (id, emoji, label, vector) VALUES
-            (1, '😊', '开心', '{"joy":0.9,"excitement":0.7,"calm":0.2,"romance":0.1,"sadness":0,"anxiety":0,"nostalgia":0,"melancholy":0}'),
-            (2, '😢', '难过', '{"sadness":0.9,"melancholy":0.5,"nostalgia":0.3,"calm":0.1,"joy":0,"anxiety":0,"excitement":0,"romance":0}'),
-            (3, '😰', '焦虑', '{"anxiety":0.9,"melancholy":0.4,"sadness":0.3,"calm":0.1,"joy":0,"excitement":0,"nostalgia":0,"romance":0}'),
-            (4, '😌', '平静', '{"calm":0.9,"nostalgia":0.3,"joy":0.2,"melancholy":0.1,"sadness":0,"anxiety":0,"excitement":0,"romance":0}'),
-            (5, '🎉', '兴奋', '{"excitement":0.9,"joy":0.8,"romance":0.3,"calm":0,"sadness":0,"anxiety":0,"nostalgia":0,"melancholy":0}'),
-            (6, '🥺', '怀旧', '{"nostalgia":0.9,"melancholy":0.5,"calm":0.4,"romance":0.2,"joy":0,"sadness":0,"anxiety":0,"excitement":0}'),
-            (7, '💕', '浪漫', '{"romance":0.9,"joy":0.6,"excitement":0.5,"nostalgia":0.3,"sadness":0,"anxiety":0,"calm":0,"melancholy":0}'),
-            (8, '🌧️', '忧郁', '{"melancholy":0.9,"sadness":0.6,"nostalgia":0.4,"anxiety":0.3,"joy":0,"excitement":0,"calm":0,"romance":0}')
+            (1, '😊', '开心', '{"joy"\:0.9,"excitement"\:0.7,"calm"\:0.2,"romance"\:0.1,"sadness"\:0,"anxiety"\:0,"nostalgia"\:0,"melancholy"\:0}'),
+            (2, '😢', '难过', '{"sadness"\:0.9,"melancholy"\:0.5,"nostalgia"\:0.3,"calm"\:0.1,"joy"\:0,"anxiety"\:0,"excitement"\:0,"romance"\:0}'),
+            (3, '😰', '焦虑', '{"anxiety"\:0.9,"melancholy"\:0.4,"sadness"\:0.3,"calm"\:0.1,"joy"\:0,"excitement"\:0,"nostalgia"\:0,"romance"\:0}'),
+            (4, '😌', '平静', '{"calm"\:0.9,"nostalgia"\:0.3,"joy"\:0.2,"melancholy"\:0.1,"sadness"\:0,"anxiety"\:0,"excitement"\:0,"romance"\:0}'),
+            (5, '🎉', '兴奋', '{"excitement"\:0.9,"joy"\:0.8,"romance"\:0.3,"calm"\:0,"sadness"\:0,"anxiety"\:0,"nostalgia"\:0,"melancholy"\:0}'),
+            (6, '🥺', '怀旧', '{"nostalgia"\:0.9,"melancholy"\:0.5,"calm"\:0.4,"romance"\:0.2,"joy"\:0,"sadness"\:0,"anxiety"\:0,"excitement"\:0}'),
+            (7, '💕', '浪漫', '{"romance"\:0.9,"joy"\:0.6,"excitement"\:0.5,"nostalgia"\:0.3,"sadness"\:0,"anxiety"\:0,"calm"\:0,"melancholy"\:0}'),
+            (8, '🌧️', '忧郁', '{"melancholy"\:0.9,"sadness"\:0.6,"nostalgia"\:0.4,"anxiety"\:0.3,"joy"\:0,"excitement"\:0,"calm"\:0,"romance"\:0}')
     """)
 
     # ── Table 3: scene_tags ──────────────────────────────────
