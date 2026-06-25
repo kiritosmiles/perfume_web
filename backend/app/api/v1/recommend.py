@@ -74,6 +74,10 @@ async def start_auth_session_get(
     weather_code: str = Query(default=""),
     temperature: str = Query(default=""),
     diversity: str = Query(default="0.0"),
+    session_mode: str = Query(default="context"),
+    recipient_age_range: str = Query(default=""),
+    recipient_relationship: str = Query(default=""),
+    recipient_gender_pref: str = Query(default=""),
     current_user: dict = Depends(get_current_user),
 ):
     await check_rate_limit(request)
@@ -96,6 +100,10 @@ async def start_auth_session_get(
     weather_code_val = int(weather_code) if weather_code.strip() else None
     temp_val = float(temperature) if temperature.strip() else None
     diversity_val = float(diversity) if diversity.strip() else 0.0
+    session_mode_val = session_mode.strip() or "context"
+    ra_val = recipient_age_range.strip() or None
+    rr_val = recipient_relationship.strip() or None
+    rg_val = recipient_gender_pref.strip() or None
     input_data = GuestSessionInput(
         emotion_card_ids=card_list,
         scene_tag=scene or None,
@@ -110,6 +118,10 @@ async def start_auth_session_get(
         weather_code=weather_code_val,
         temperature=temp_val,
         diversity=diversity_val,
+        session_mode=session_mode_val,  # type: ignore[arg-type]
+        recipient_age_range=ra_val,
+        recipient_relationship=rr_val,
+        recipient_gender_pref=rg_val,
     )
     return StreamingResponse(
         sse_event_stream(input_data, user_id=user_id),

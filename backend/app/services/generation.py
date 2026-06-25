@@ -211,9 +211,21 @@ def _diverse_top3(candidates: list[dict], intent: str = "self_use", diversity: f
     if not candidates:
         return []
 
-    # Determine cluster order: gift=safe priority, else=score order
+    # Determine cluster order: gift=safe priority
     if intent == "gift":
         cluster_order = {c: i for i, c in enumerate(GIFT_CLUSTER_PRIORITY)}
+    elif intent == "explore":
+        # Explore: de-prioritize common clusters (floral, citrus, woody)
+        # to push discovery toward niche accords like leather, oriental, spicy
+        EXPLORE_DEPRIORITIZED = {"floral", "citrus", "woody"}
+        cluster_order = {}
+        for c in candidates:
+            accord = c.get("accord", "other")
+            cluster = ACCORD_CLUSTERS.get(accord, "other")
+            if cluster in EXPLORE_DEPRIORITIZED:
+                cluster_order[cluster] = 10  # Push to back
+            else:
+                cluster_order[cluster] = 0   # Prefer niche
     else:
         cluster_order = {}
 
@@ -272,8 +284,9 @@ def _diverse_top3(candidates: list[dict], intent: str = "self_use", diversity: f
             if len(selected) >= 3:
                 break
 
-        # For explore intent: ensure max diversity by re-ranking selected items
-        if intent == "explore" and len(selected) >= 3:
+        # For explore intent: re-rank selected by cluster diversity
+        # (niche clusters first, common clusters last)
+        if intent == "explore" and len(selected) >= 2:
             selected.sort(key=lambda c: cluster_order.get(
                 ACCORD_CLUSTERS.get(c.get("accord", "other"), "other"), 999
             ))

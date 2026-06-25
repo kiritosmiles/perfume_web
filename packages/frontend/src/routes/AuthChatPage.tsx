@@ -36,7 +36,7 @@ export function AuthChatPage() {
     <RecommendationFlow
       variant="auth"
       quotaInfo={quotaInfo}
-      getSSEUrl={({ cardIds, freeText, sceneTag, intent, environment, diversity }) => {
+      getSSEUrl={({ cardIds, freeText, sceneTag, intent, environment, diversity, sessionMode }) => {
         const params = new URLSearchParams();
         if (cardIds.length > 0) params.set("card_ids", cardIds.join(","));
         else params.set("card_ids", "");
@@ -50,6 +50,8 @@ export function AuthChatPage() {
         if (environment.temperature !== null) params.set("temperature", String(environment.temperature));
         // Diversity (FR-3.8)
         if (diversity > 0) params.set("diversity", String(diversity));
+        // Session mode (FR-1.5)
+        if (sessionMode && sessionMode !== "context") params.set("session_mode", sessionMode);
         // Pass token as query param for EventSource (cannot send custom headers)
         const at = localStorage.getItem("access_token");
         if (at) params.set("token", at);

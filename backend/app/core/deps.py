@@ -20,7 +20,7 @@ async def get_db_pg() -> AsyncGenerator[asyncpg.Connection, None]:
 
 
 async def get_current_user(request: Request) -> dict:
-    """Extract JWT from Authorization header or ?token= query param, return {id, email}."""
+    """Extract JWT from Authorization header or ?token= query param, return {id, email, tier}."""
     from app.core.auth import decode_token
     from app.core.pg import get_pg_pool
 
@@ -46,12 +46,19 @@ async def get_current_user(request: Request) -> dict:
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing sub claim")
 
+    # Tier from JWT (fast path) — fallback to PG if not present
+    tier = payload.get("tier", None)
+
     pool = await get_pg_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT id, email FROM users WHERE id = $1::uuid", user_id
+            "SELECT id, email, feature_tier FROM users WHERE id = $1::uuid", user_id
         )
         if not row:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
-        return {"id": str(row["id"]), "email": row["email"]}
+        return {
+            "id": str(row["id"]),
+            "email": row["email"],
+            "tier": tier or row.get("feature_tier") or "free",
+        }

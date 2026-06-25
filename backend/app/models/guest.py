@@ -20,6 +20,12 @@ class GuestSessionInput(BaseModel):
     weather_code: int | None = None  # WMO weather code
     temperature: float | None = None  # Celsius
     diversity: float = 0.0  # FR-3.8: 0-1 diversity control
+    # ── FR-1.5: Session mode (Phase 4) ──
+    session_mode: Literal["context", "identity", "novelty"] = "context"
+    # ── FR-3.5 / FR-3.9: Gift recipient fields (optional, only for gift intent) ──
+    recipient_age_range: str | None = None  # "0-12"|"13-17"|"18-24"|"25-35"|"36-50"|"50+"
+    recipient_relationship: str | None = None  # "friend"|"partner"|"parent"|"child"|"colleague"
+    recipient_gender_pref: str | None = None  # "feminine"|"masculine"|"unisex"
 
     @model_validator(mode="after")
     def validate_has_input(self):

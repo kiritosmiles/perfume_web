@@ -493,10 +493,21 @@ async def sse_event_stream(
                 "boundary_reasoning": boundary_verdict.get("reasoning", ""),
             })
 
+    # ── FR-1.5: Session mode adjustments ───────────────────────────────
+    _session_mode = input_data.session_mode or "context"
+    if _session_mode == "novelty":
+        # Force diversity >= 0.5 for cross-style exploration
+        input_data.diversity = max(0.5, input_data.diversity)
+    elif _session_mode == "identity":
+        # Identity mode: use stable profile, no diversity override
+        pass
+    # context mode: default behavior, no change
+
     # 3) gen.start
     yield sse("gen.start", {
         "generation_id": generation_id,
         "mode": "fast",
+        "session_mode": _session_mode,
     })
 
     # ── Refinement: adjust emotion vector based on user refinement keyword ──
@@ -772,6 +783,7 @@ async def sse_event_stream(
             "cross_style": input_data.diversity >= 0.5,
             "overstep_flag": boundary_verdict.get("overstep_flag", "unchecked"),
             "skeleton_cache_hit": skeleton_cache_hit,
+            "session_mode": _session_mode,
         },
     })
 

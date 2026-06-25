@@ -9,6 +9,7 @@ interface EmotionState {
 }
 
 export type SessionIntent = "self_use" | "gift" | "explore";
+export type SessionMode = "context" | "identity" | "novelty";
 
 interface SessionState {
   sessionId: string | null;
@@ -23,6 +24,7 @@ interface SessionState {
     latency_ms: number;
   } | null;
   intent: SessionIntent;
+  sessionMode: SessionMode;
   gate: {
     verdict: "sufficient" | "partial" | "insufficient" | null;
     questions: string[] | null;
@@ -42,6 +44,7 @@ interface SessionState {
   setRecall: (recall: SessionState["recall"]) => void;
   setCrisis: (crisis: SessionState["crisis"]) => void;
   setIntent: (intent: SessionIntent) => void;
+  setSessionMode: (mode: SessionMode) => void;
   setGate: (gate: SessionState["gate"]) => void;
   reset: () => void;
 }
@@ -54,6 +57,7 @@ const initialState = {
   messageAcked: false,
   recall: null,
   intent: "self_use" as SessionIntent,
+  sessionMode: "context" as SessionMode,
   gate: null,
 };
 
@@ -80,6 +84,8 @@ export const useSessionStore = create<SessionState>((set) => ({
   setCrisis: (crisis) => set({ crisis }),
 
   setIntent: (intent) => set({ intent }),
+
+  setSessionMode: (sessionMode) => set({ sessionMode }),
 
   setGate: (gate) => set({ gate }),
 

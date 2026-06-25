@@ -117,6 +117,12 @@ async def start_guest_session_get(
     temperature: str = Query(default="", description="Current temperature in Celsius"),
     # Diversity (FR-3.8)
     diversity: str = Query(default="0.0", description="Diversity level 0-1"),
+    # Session mode (FR-1.5)
+    session_mode: str = Query(default="context", description="Session mode: context|identity|novelty"),
+    # Gift recipient (FR-3.5)
+    recipient_age_range: str = Query(default="", description="Recipient age range for gift intent"),
+    recipient_relationship: str = Query(default="", description="Recipient relationship for gift intent"),
+    recipient_gender_pref: str = Query(default="", description="Recipient gender preference for gift intent"),
 ):
     # Rate limit (TRD §6.2: 120 GET/min)
     if not await rate_limit_guest(request):
@@ -151,6 +157,10 @@ async def start_guest_session_get(
     weather_code_val = int(weather_code) if weather_code.strip() else None
     temp_val = float(temperature) if temperature.strip() else None
     diversity_val = float(diversity) if diversity.strip() else 0.0
+    session_mode_val = session_mode.strip() or "context"
+    ra_val = recipient_age_range.strip() or None
+    rr_val = recipient_relationship.strip() or None
+    rg_val = recipient_gender_pref.strip() or None
     input_data = GuestSessionInput(
         emotion_card_ids=card_list,
         scene_tag=scene or None,
@@ -164,6 +174,10 @@ async def start_guest_session_get(
         weather_code=weather_code_val,
         temperature=temp_val,
         diversity=diversity_val,
+        session_mode=session_mode_val,  # type: ignore[arg-type]
+        recipient_age_range=ra_val,
+        recipient_relationship=rr_val,
+        recipient_gender_pref=rg_val,
         intent="self_use",  # type: ignore[arg-type]  # always self_use for guests
     )
 

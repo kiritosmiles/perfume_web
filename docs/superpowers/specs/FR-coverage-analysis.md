@@ -26,7 +26,7 @@
 | FR-5.3 | 转人工机制 | ✅ 完成 | human_handoff_check("转人工/找客服") → system.notification + CrisisOverlay |
 
 | FR-2.5 | 情绪价值维度映射 | ✅ 完成 | compute_value_dimensions (8→6 deterministic) + SSE + Profile API + ProfilePage bar chart |
-| FR-3.5 | AI配方生成（意图门控） | 🔶 部分 | self_use 模式完整，gift/explore 模式待 Phase 2 |
+| FR-3.5 | AI配方生成（意图门控） | ✅ 完成 | 三分支完整: self_use(过敏原过滤) + gift(常见过敏原标注+收礼人字段) + explore(跳过安全档案+跨集群探索) |
 | FR-5.7 | 会话意图检测 | ✅ 完成 | 3层检测(keyword<1ms → LLM ~800ms → default) + info_completeness维度输出 |
 | FR-3.9 | 送礼场景推荐策略 | ✅ 完成 | gift=safe cluster priority + GIFT_STORY_TEMPLATES (8 emotions × 4 lines) |
 | FR-5.11 | 信息完整性 Agent Gate | ✅ 完成 | agent_gate.py + gate.* SSE events + GateQuestionBanner组件 + 500ms硬边界 |
@@ -46,17 +46,18 @@
 | — | GraphRAG 热点缓存 | ✅ 完成 | Redis graphrag:* 缓存 (card-preset 36 种组合, TTL 1h) + cache_hit metadata |
 | FR-3.10 | 调香师协作桥 | ⏳ Phase 4 | B端功能，非MVP范围 |
 | FR-1.4 | 社交授权导入 | ⏳ Phase 4 | 第三方导入 |
-| FR-1.5 | 三种 Session 模式 | ⏳ Phase 4 | Identity/Context/Novelty |
-| FR-5.5 | 过渡动画与等待体验 | ⏳ Phase 4 | 精细化动画 |
-| FR-5.9 | Agent 角色边界保护 | ⏳ Phase 4 | 越界检测 |
+| FR-1.5 | 三种 Session 模式 | ✅ 完成 | Identity/Context/Novelty 三模式 + SessionModeSelector UI + novelty强制diversity≥0.5 |
+| FR-5.5 | 过渡动画与等待体验 | ⏳ Batch 3 | 精细化动画 (KnowledgeCardOverlay) |
+| FR-5.9 | Agent 角色边界保护 | ✅ 完成 | LLM调用B异步安全旁路 + overstep/borderline/injection/hostile 五级判决 + 3次连续越界→转人工 |
+| — | 配方骨架缓存 | ✅ 完成 | Redis skeleton:* 缓存 (card-preset, TTL 24h) + skeleton_cache_hit metadata + gen.copy缓存直出 |
+| — | 免费/付费切割 | ✅ 完成 | users.feature_tier (free/premium) + tier配额差异化 + JWT tier claim + QuotaBar UI |
 
 ## 统计
 
 | 类别 | 数量 | 占比 |
 |------|:---:|:---:|
-| ✅ 完成 | 29 | 83% |
-| 🔶 部分 | 1 | 3% |
-| ⏳ 后MVP (Phase 4) | 5 | 14% |
+| ✅ 完成 | 33 | 94% |
+| ⏳ 后MVP (Batch 3) | 2 | 6% |
 
-**当前覆盖率: 29/29 = 100% 完整实现 (含 Phase 4 首批三项)**
-*(注: 5个FR超出MVP范围，属于后续规划；FR-3.5 部分完成，gift/explore 待后续)*
+**当前覆盖率: 33/35 FR = 94% (含 Batch 1+2 五项)**
+*(注: FR-3.10 调香师协作桥 + FR-1.4 社交授权导入 本批次跳过；FR-5.5 过渡动画 留待 Batch 3)*

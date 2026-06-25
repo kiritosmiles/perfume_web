@@ -23,6 +23,7 @@ def _user_response(row) -> dict:
     return {
         "id": str(row["id"]),
         "email": row["email"],
+        "feature_tier": row.get("feature_tier", "free"),
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
     }
 
@@ -65,7 +66,7 @@ async def register(input_data: RegisterInput, request: Request):
                 except Exception:
                     logger.warning("Memory migration failed for browser_id=%s", input_data.browser_id)
 
-        access = create_access_token(user_id)
+        access = create_access_token(user_id, feature_tier=row.get("feature_tier", "free"))
         refresh_raw, refresh_hash = create_refresh_token(user_id)
         expires = datetime.now(timezone.utc) + timedelta(days=7)
         await conn.execute(
@@ -85,7 +86,10 @@ async def login(input_data: LoginInput, request: Request):
     await check_rate_limit(request)
     pool = await get_pg_pool()
     async with pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT id, email, password_hash, created_at FROM users WHERE email = $1", input_data.email)
+        row = await conn.fetchrow(
+            "SELECT id, email, password_hash, created_at, feature_tier FROM users WHERE email = $1",
+            input_data.email,
+        )
         if not row:
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
@@ -93,7 +97,7 @@ async def login(input_data: LoginInput, request: Request):
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
         user_id = str(row["id"])
-        access = create_access_token(user_id)
+        access = create_access_token(user_id, feature_tier=row.get("feature_tier", "free"))
         refresh_raw, refresh_hash = create_refresh_token(user_id)
         expires = datetime.now(timezone.utc) + timedelta(days=7)
         await conn.execute(
@@ -135,11 +139,13 @@ async def refresh(input_data: RefreshInput):
 
         await conn.execute("DELETE FROM refresh_tokens WHERE token_hash = $1", token_hash)
 
-        user = await conn.fetchrow("SELECT id, email, created_at FROM users WHERE id = $1::uuid", user_id)
+        user = await conn.fetchrow(
+            "SELECT id, email, created_at, feature_tier FROM users WHERE id = $1::uuid", user_id,
+        )
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
 
-        access = create_access_token(user_id)
+        access = create_access_token(user_id, feature_tier=user.get("feature_tier", "free"))
         refresh_raw, new_hash = create_refresh_token(user_id)
         expires = datetime.now(timezone.utc) + timedelta(days=7)
         await conn.execute(

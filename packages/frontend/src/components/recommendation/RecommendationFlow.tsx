@@ -5,6 +5,8 @@ import { EmotionCardPicker } from "../emotion/EmotionCardPicker";
 import { EmotionConfirmation } from "../emotion/EmotionConfirmation";
 import { SceneTagChips } from "../chat/SceneTagChips";
 import { IntentSelector } from "../chat/IntentSelector";
+import { SessionModeSelector } from "../chat/SessionModeSelector";
+import type { SessionMode } from "../chat/SessionModeSelector";
 import { ChatBody } from "../chat/ChatBody";
 import { ChatInput } from "../chat/ChatInput";
 import { ThinkingIndicator } from "../chat/ThinkingIndicator";
@@ -38,6 +40,7 @@ interface RecommendationFlowProps {
     intent: "self_use" | "gift" | "explore";
     environment: EnvironmentData;
     diversity: number;
+    sessionMode: SessionMode;
   }) => string | null;
   quotaInfo?: QuotaInfo;
   onQuotaExhausted?: () => void;
@@ -56,6 +59,7 @@ export function RecommendationFlow({
   const [freeText, setFreeText] = useState("");
   const [sceneTag, setSceneTag] = useState<string>("");
   const [intent, setIntent] = useState<"self_use" | "gift" | "explore">("self_use");
+  const [sessionMode, setSessionMode] = useState<SessionMode>("context");
   const [sseUrl, setSseUrl] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
@@ -105,6 +109,7 @@ export function RecommendationFlow({
       intent,
       environment: envEnabled ? env : { season: null, time_of_day: null, weather_code: null, temperature: null, weather_label: null, weather_emoji: null },
       diversity,
+      sessionMode,
     });
     if (!url) {
       onQuotaExhausted?.();
@@ -173,6 +178,7 @@ export function RecommendationFlow({
       intent,
       environment: envEnabled ? env : { season: null, time_of_day: null, weather_code: null, temperature: null, weather_label: null, weather_emoji: null },
       diversity,
+      sessionMode,
     });
   };
 
@@ -350,6 +356,18 @@ export function RecommendationFlow({
                   value={intent}
                   onChange={setIntent}
                   isGuest={_variant === "guest"}
+                />
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs text-stone-400 text-center mb-3 font-medium uppercase tracking-wider">
+                Mode
+              </p>
+              <div className="flex justify-center">
+                <SessionModeSelector
+                  value={sessionMode}
+                  onChange={setSessionMode}
                 />
               </div>
             </div>

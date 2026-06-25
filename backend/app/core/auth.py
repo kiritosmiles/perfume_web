@@ -24,14 +24,18 @@ def verify_password(password: str, password_hash: str) -> bool:
     return _bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
 
 
-def create_access_token(user_id: str) -> str:
-    """Create HS256 JWT access token. exp=1h. Payload: {sub, type:'access', iat, exp}"""
+def create_access_token(user_id: str, feature_tier: str = "free") -> str:
+    """Create HS256 JWT access token. exp=1h.
+
+    Payload: {sub, type:'access', iat, exp, tier}
+    """
     now = datetime.now(timezone.utc)
     payload = {
         "sub": str(user_id),
         "type": "access",
         "iat": now,
         "exp": now + ACCESS_TTL,
+        "tier": feature_tier,
     }
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=ALGORITHM)
 
