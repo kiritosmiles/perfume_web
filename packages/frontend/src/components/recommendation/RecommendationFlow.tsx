@@ -1,6 +1,6 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+﻿import { useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { EmotionCardPicker } from "../emotion/EmotionCardPicker";
 import { EmotionConfirmation } from "../emotion/EmotionConfirmation";
 import { SceneTagChips } from "../chat/SceneTagChips";
@@ -25,6 +25,7 @@ import { useGenerationStore } from "../../stores/generationStore";
 import { createShareLink } from "../../lib/apiClient";
 import { CrisisOverlay } from "../safety/CrisisOverlay";
 import { RefinementChips } from "../refinement/RefinementChips";
+import { HumanSupportBanner } from "../support/HumanSupportBanner";
 
 export interface QuotaInfo {
   sessions?: { used: number; max: number; remaining: number };
@@ -48,6 +49,12 @@ interface RecommendationFlowProps {
   onLogout?: () => void;
 }
 
+const REFINE_METHOD_LABEL: Record<string, string> = {
+  rule: "Rule engine",
+  semantic_gate: "Semantic gate",
+  deep_upgrade: "Deep mode",
+};
+
 export function RecommendationFlow({
   variant: _variant,
   getSSEUrl,
@@ -64,23 +71,42 @@ export function RecommendationFlow({
   const [sseUrl, setSseUrl] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
-  // ── Environment perception (FR-2.8) ──
   const { env, enabled: envEnabled, setEnabled: setEnvEnabled } = useEnvironment();
-  // ── Diversity (FR-3.8) ──
   const [diversity, setDiversity] = useState(0);
+  // P2.3: Handoff tracking
+  const [showHandoff, setShowHandoff] = useState(false);
+  const [handoffSubmitted, setHandoffSubmitted] = useState(false);
 
+  // --- Store selectors ---
   const emotion = useSessionStore((s) => s.emotion);
   const sseStatus = useSessionStore((s) => s.sseStatus);
   const crisis = useSessionStore((s) => s.crisis);
+  const gate = useSessionStore((s) => s.gate);
+
   const generationPhase = useGenerationStore((s) => s.phase);
   const cards = useGenerationStore((s) => s.cards);
   const generationError = useGenerationStore((s) => s.error);
-  const gate = useSessionStore((s) => s.gate);
+
+  // P0.1: Refinement state
+  const isRefining = useGenerationStore((s) => s.isRefining);
+  const refineAttempt = useGenerationStore((s) => s.refineAttempt);
+  const refineMethod = useGenerationStore((s) => s.refineMethod);
+
+  // P0.2: Lifecycle
+  const sessionStatus = useSessionStore((s) => s.sessionStatus);
+  const resumeInfo = useSessionStore((s) => s.resumeInfo);
+
+  // P0.3: System notifications
+  const notifications = useSessionStore((s) => s.notifications);
+  const systemError = useSessionStore((s) => s.systemError);
+  const dismissSystemError = useSessionStore((s) => s.dismissSystemError);
+
+  // P2.4: Chat error
+  const chatError = useSessionStore((s) => s.chatError);
+  const setChatError = useSessionStore((s) => s.setChatError);
 
   const navigate = useNavigate();
   const { close } = useSSE({ url: sseUrl });
-
-  // Implicit feedback tracking (dwell, share, refine events)
   const { track } = useImplicitTracking();
 
   const noteRef = useRef<HTMLDivElement>(null);
@@ -116,7 +142,6 @@ export function RecommendationFlow({
       onQuotaExhausted?.();
       return;
     }
-    // Append allergens from localStorage if configured
     const allergens = localStorage.getItem("perfume_allergens") || "";
     const finalUrl = allergens ? `${url}&allergens=${encodeURIComponent(allergens)}` : url;
     setSseUrl(finalUrl);
@@ -128,7 +153,8 @@ export function RecommendationFlow({
     setCardIds([]);
     setFreeText("");
     setSceneTag("");
-    useSessionStore.getState().reset();
+    useSessionStore.getState().reset();    setShowHandoff(false);
+    setHandoffSubmitted(false);
     useGenerationStore.getState().reset();
   };
 
@@ -191,7 +217,11 @@ export function RecommendationFlow({
     const allergens = localStorage.getItem("perfume_allergens") || "";
     let refineUrl = `${baseUrl}&refine=${encodeURIComponent(key)}`;
     if (allergens) refineUrl += `&allergens=${encodeURIComponent(allergens)}`;
-    track("refine_used", { keyword: key });
+    track("refine_used", { keyword: key });    // Show handoff after 3rd refinement
+    const attemptCount = useGenerationStore.getState().refineAttempt;
+    if (attemptCount && attemptCount >= 3) {
+      setShowHandoff(true);
+    }
     setSseUrl(refineUrl);
   };
 
@@ -216,7 +246,7 @@ export function RecommendationFlow({
     generationPhase !== "error";
   const hasStarted = sseUrl !== null;
 
-  // ── FR-5.5: Time-gated loading states ──
+  // FR-5.5: Time-gated loading states
   const [loadingElapsed, setLoadingElapsed] = useState(0);
   useEffect(() => {
     if (!isGenerating) {
@@ -230,6 +260,17 @@ export function RecommendationFlow({
     return () => clearInterval(timer);
   }, [isGenerating]);
 
+  // P0.3: Auto-dismiss system notification toast
+  const [visibleNotification, setVisibleNotification] = useState<typeof notifications[0] | null>(null);
+  useEffect(() => {
+    if (notifications.length > 0) {
+      const latest = notifications[notifications.length - 1];
+      setVisibleNotification(latest);
+      const timer = setTimeout(() => setVisibleNotification(null), 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [notifications]);
+
   const statusDot = {
     idle: "bg-stone-300",
     connecting: "bg-amber-400 animate-pulse",
@@ -240,10 +281,97 @@ export function RecommendationFlow({
 
   return (
     <div className="min-h-dvh bg-stone-50 flex flex-col">
-      {/* Network status bar — thin top strip for connection state */}
       <NetworkStatusBar />
 
-      {/* Crisis overlay — rendered when safety.crisis/safety.block detected */}
+      {/* P0.3: System notification toast */}
+      <AnimatePresence>
+        {visibleNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-16 left-1/2 -translate-x-1/2 z-50 max-w-sm w-full px-4"
+          >
+            <div className="glass-card px-4 py-3 text-sm text-stone-700 shadow-md flex items-center gap-3">
+              <span className="text-base">
+                {visibleNotification.kind === "perfumer_update" ? "馃嵼" : "馃摚"}
+              </span>
+              <p className="flex-1">{visibleNotification.message}</p>
+              <button
+                onClick={() => setVisibleNotification(null)}
+                className="text-stone-400 hover:text-stone-600 text-xs shrink-0"
+              >
+                鉁?
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* P0.3: System error banner */}
+      <AnimatePresence>
+        {systemError && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="bg-red-50 border-b border-red-100"
+          >
+            <div className="max-w-2xl mx-auto px-4 py-2 flex items-center gap-3">
+              <span className="text-red-500 text-xs shrink-0">馃揄</span>
+              <p className="text-xs text-red-700 flex-1">{systemError.user_message}</p>
+              {systemError.retryable && (
+                <button
+                  onClick={() => window.location.reload()}
+                  className="text-xs text-red-600 underline underline-offset-2 shrink-0"
+                >
+                  Reload
+                </button>
+              )}
+              <button
+                onClick={dismissSystemError}
+                className="text-red-400 hover:text-red-600 text-xs shrink-0"
+              >
+                鉁?
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* P0.2: Idle timeout banner */}
+      <AnimatePresence>
+        {sessionStatus === "idle_timeout" && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="bg-amber-50 border-b border-amber-100"
+          >
+            <div className="max-w-2xl mx-auto px-4 py-2 text-xs text-amber-700 text-center">
+              Session timed out. Start a new conversation to continue.
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* P0.2: Resume banner */}
+      <AnimatePresence>
+        {resumeInfo && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="bg-blue-50 border-b border-blue-100"
+          >
+            <div className="max-w-2xl mx-auto px-4 py-2 text-xs text-blue-700 text-center">
+              Resuming from phase: {resumeInfo.from_phase}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Crisis overlay */}
       {crisis?.is_crisis && (
         <CrisisOverlay
           severity={crisis.severity}
@@ -264,7 +392,7 @@ export function RecommendationFlow({
             }}
             className="text-stone-500 hover:text-stone-800 transition-colors text-sm"
           >
-            {hasStarted ? "← New Session" : "← Home"}
+            {hasStarted ? "鈫?New Session" : "鈫?Home"}
           </button>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
@@ -295,15 +423,64 @@ export function RecommendationFlow({
       {quotaInfo && (
         <div className="max-w-md mx-auto mt-3 flex justify-center gap-4 text-xs text-stone-400">
           <span>
-            Sessions: {quotaInfo.sessions?.remaining ?? "—"}/
-            {quotaInfo.sessions?.max ?? "—"}
+            Sessions: {quotaInfo.sessions?.remaining ?? "鈥?"}/
+            {quotaInfo.sessions?.max ?? "鈥?"}
           </span>
           <span>
-            Generations: {quotaInfo.generations?.remaining ?? "—"}/
-            {quotaInfo.generations?.max ?? "—"}
+            Generations: {quotaInfo.generations?.remaining ?? "鈥?"}/
+            {quotaInfo.generations?.max ?? "鈥?"}
           </span>
         </div>
       )}
+
+      {/* P2.4: Chat error inline */}
+      <AnimatePresence>
+        {chatError && (
+          <motion.div
+            initial={{ opacity: 0, y: -5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -5 }}
+            className="max-w-md mx-auto mt-3 glass-card px-4 py-2 text-center"
+          >
+            <p className="text-xs text-red-600">{chatError.user_message}</p>
+            {chatError.retryable && (
+              <button
+                onClick={() => { setChatError(null); handleReset(); }}
+                className="text-xs text-stone-500 underline underline-offset-2 mt-1"
+              >
+                Try again
+              </button>
+            )}
+            <button
+              onClick={() => setChatError(null)}
+              className="text-xs text-stone-400 ml-2"
+            >
+              鉁?
+            </Button>
+          </motion.div>
+        )}
+        {/* P2.3: Human support banner — shown after 3 refinement attempts */}
+        {showHandoff && !handoffSubmitted && (
+          <div className="max-w-md mx-auto pt-4">
+            <HumanSupportBanner
+              visible={true}
+              onHandoffSubmitted={(ticketId) => {
+                setHandoffSubmitted(true);
+              }}
+              onDismiss={() => setShowHandoff(false)}
+            />
+          </div>
+        )}
+
+        {handoffSubmitted && (
+          <div className="max-w-md mx-auto pt-4">
+            <HumanSupportBanner
+              visible={true}
+              onDismiss={() => setHandoffSubmitted(false)}
+            />
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Chat body */}
       <ChatBody>
@@ -331,8 +508,8 @@ export function RecommendationFlow({
                     }`}
                 >
                   {mode === "cards"
-                    ? "🎭 Pick a Card"
-                    : "✍️ Write how you feel"}
+                    ? "馃幁 Pick a Card"
+                    : "鉁嶏笍 Write how you feel"}
                 </button>
               ))}
             </div>
@@ -389,7 +566,7 @@ export function RecommendationFlow({
 
             <div>
               <p className="text-xs text-stone-400 text-center mb-3 font-medium uppercase tracking-wider">
-                Optional · Scene
+                Optional 路 Scene
               </p>
               <div className="flex justify-center">
                 <SceneTagChips
@@ -399,30 +576,28 @@ export function RecommendationFlow({
               </div>
             </div>
 
-            {/* Environment indicator (FR-2.8) */}
             {envEnabled && (env.season || env.time_of_day || env.temperature !== null) && (
               <div className="flex items-center justify-center gap-2 text-xs text-stone-400">
                 <span>{formatEnvironmentLabel(env)}</span>
                 <button
                   onClick={() => setEnvEnabled(false)}
                   className="text-stone-300 hover:text-stone-500 transition-colors"
-                  title="关闭环境感知"
+                  title="关关环境感知"
                 >
-                  ✕
+                  鉁?
                 </button>
               </div>
             )}
 
-            {/* Diversity selector (FR-3.8) */}
             <div>
               <p className="text-xs text-stone-400 text-center mb-2 font-medium uppercase tracking-wider">
                 Style
               </p>
               <div className="flex justify-center gap-2">
                 {[
-                  { value: 0, label: "🎯 精准匹配" },
-                  { value: 0.3, label: "⚖️ 均衡" },
-                  { value: 0.6, label: "🎲 惊喜探索" },
+                  { value: 0, label: "馃幆 精精准匹配" },
+                  { value: 0.3, label: "鈿栵笍 均衡" },
+                  { value: 0.6, label: "馃幉 惊喜探索" },
                 ].map((opt) => (
                   <button
                     key={opt.value}
@@ -444,7 +619,7 @@ export function RecommendationFlow({
           </motion.div>
         )}
 
-        {/* Agent Gate: show questions when information is insufficient */}
+        {/* Agent Gate */}
         {gate && gate.verdict === "insufficient" && gate.questions && (
           <div className="max-w-md mx-auto pt-4">
             <GateQuestionBanner
@@ -475,7 +650,25 @@ export function RecommendationFlow({
           </div>
         )}
 
-        {/* FR-5.5: Knowledge card carousel for >3s waits */}
+        {/* P1.4: Refinement progress indicator */}
+        {isRefining && (
+          <div className="max-w-md mx-auto py-2">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex items-center justify-center gap-2 text-xs text-stone-400"
+            >
+              <div className="w-3 h-3 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
+              <span>
+                Refining
+                {refineAttempt ? ` (attempt ${refineAttempt}/3)` : ""}
+                {refineMethod ? ` \u00b7 ${REFINE_METHOD_LABEL[refineMethod] || refineMethod}` : ""}
+              </span>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Knowledge card carousel for >3s waits */}
         <KnowledgeCardOverlay visible={isGenerating && cards.length === 0 && loadingElapsed >= 3} />
 
         <div className="w-full px-4">
@@ -517,7 +710,28 @@ export function RecommendationFlow({
             >
               Try Again
             </Button>
-          </motion.div>
+          </motion.div>        )}
+
+        {/* P2.3: Human support banner — shown after 3 refinement attempts */}
+        {showHandoff && !handoffSubmitted && (
+          <div className="max-w-md mx-auto pt-4">
+            <HumanSupportBanner
+              visible={true}
+              onHandoffSubmitted={(ticketId) => {
+                setHandoffSubmitted(true);
+              }}
+              onDismiss={() => setShowHandoff(false)}
+            />
+          </div>
+        )}
+
+        {handoffSubmitted && (
+          <div className="max-w-md mx-auto pt-4">
+            <HumanSupportBanner
+              visible={true}
+              onDismiss={() => setHandoffSubmitted(false)}
+            />
+          </div>
         )}
       </ChatBody>
 
@@ -534,12 +748,11 @@ export function RecommendationFlow({
           </Button>
         ) : generationPhase === "complete" ? (
           <div className="space-y-3 w-full">
-            {/* Refinement chips */}
             <RefinementChips onSelect={handleRefine} />
 
             {shareUrl && (
               <div className="glass-card px-3 py-2 text-center text-xs text-green-700">
-                Link copied! 📋
+                Link copied! 馃搵
               </div>
             )}
             <div className="flex gap-2">
@@ -572,7 +785,6 @@ export function RecommendationFlow({
         ) : null}
       </ChatInput>
 
-      {/* Offscreen note card for PNG export */}
       <div ref={noteRef} className="fixed -left-[9999px] top-0">
         <NoteCard
           cards={cards}
@@ -587,3 +799,4 @@ export function RecommendationFlow({
     </div>
   );
 }
+

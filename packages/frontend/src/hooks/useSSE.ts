@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+﻿import { useEffect, useRef } from "react";
 import { createSSEConnection } from "../lib/sseClient";
 import { useSessionStore } from "../stores/sessionStore";
 import { useGenerationStore, type SkeletonCard } from "../stores/generationStore";
@@ -17,6 +17,19 @@ export function useSSE({ url }: UseSSEOptions) {
   const setRecall = useSessionStore((s) => s.setRecall);
   const setIntent = useSessionStore((s) => s.setIntent);
   const setGate = useSessionStore((s) => s.setGate);
+  // P0.2: lifecycle
+  const setSessionStatus = useSessionStore((s) => s.setSessionStatus);
+  const setResumeInfo = useSessionStore((s) => s.setResumeInfo);
+  // P0.3: system events
+  const pushNotification = useSessionStore((s) => s.pushNotification);
+  const setSystemError = useSessionStore((s) => s.setSystemError);
+  // P2.4: chat.error
+  const setChatError = useSessionStore((s) => s.setChatError);
+
+  // P0.1: refine events
+  const setRefineStart = useGenerationStore((s) => s.setRefineStart);
+  const setRefineResult = useGenerationStore((s) => s.setRefineResult);
+  const clearRefining = useGenerationStore((s) => s.clearRefining);
 
   const startGeneration = useGenerationStore((s) => s.startGeneration);
   const setSkeleton = useGenerationStore((s) => s.setSkeleton);
@@ -66,6 +79,15 @@ export function useSSE({ url }: UseSSEOptions) {
             setIntent((data.intent as string) as "self_use" | "gift" | "explore" || "self_use");
             break;
 
+          // P2.4: chat-level errors (distinct from gen.error)
+          case "chat.error":
+            setChatError({
+              code: data.code as string,
+              user_message: data.user_message as string,
+              retryable: (data.retryable as boolean) || false,
+            });
+            break;
+
           case "gate.check":
             setGate({
               verdict: (data.verdict as "sufficient" | "partial" | "insufficient"),
@@ -85,7 +107,6 @@ export function useSSE({ url }: UseSSEOptions) {
             break;
 
           case "gate.wait":
-            // Keep existing gate state but mark as waiting
             setGate({
               verdict: "partial",
               questions: null,
@@ -137,6 +158,86 @@ export function useSSE({ url }: UseSSEOptions) {
             );
             break;
 
+          // --- P0.1: Refinement events ---
+          case "refine.start":
+            setRefineStart(
+              (data.attempt as 1 | 2 | 3) || 1,
+              (data.method as "rule" | "semantic_gate") || "rule",
+            );
+            break;
+
+          case "refine.result":
+            setRefineResult(
+              (data.adjustments as unknown[]) || [],
+              (data.updated_cards as unknown[]) || [],
+            );
+            break;
+
+          case "refine.gate":
+            // Server reports the semantic gate verdict for refinement
+            if (data.verdict === "continue") {
+              // Keep waiting for refine.result
+            } else if (data.verdict === "downgrade_to_ask") {
+              // Gate decided to ask the user instead
+              clearRefining();
+              setGate({
+                verdict: "insufficient",
+                questions: (data.reason != null ? [data.reason as string] : ["Could you tell me more?"]),
+                hint: null,
+                bypassed: false,
+              });
+            }
+            break;
+
+          case "refine.fallback":
+            clearRefining();
+            if (data.action === "ask") {
+              setGate({
+                verdict: "insufficient",
+                questions: data.message ? [data.message as string] : [],
+                hint: null,
+                bypassed: false,
+              });
+            }
+            // action === "upgrade_to_deep": generation side handles mode switch
+            break;
+
+          // --- P0.2: Lifecycle events ---
+          case "lifecycle.session":
+            setSessionStatus((data.status as "active" | "idle_timeout" | "completed"));
+            break;
+
+          case "lifecycle.resume":
+            setResumeInfo({
+              generation_id: data.generation_id as string,
+              from_phase: data.from_phase as string,
+              already_streamed_count: (data.already_streamed_count as number) || 0,
+            });
+            break;
+
+          // --- P0.3: System events ---
+          case "system.heartbeat":
+            // Heartbeat is already handled by sseClient's internal heartbeat timeout.
+            // Forward to store for external monitoring if needed.
+            break;
+
+          case "system.notification":
+            pushNotification({
+              kind: (data.kind as "perfumer_update" | "mood_journal_ready") || "perfumer_update",
+              message: data.message as string,
+              action_link: (data.action_link as string) || null,
+              ts: new Date().toISOString(),
+            });
+            break;
+
+          case "system.error":
+            setSystemError({
+              code: data.code as string,
+              user_message: data.user_message as string,
+              retryable: (data.retryable as boolean) || false,
+            });
+            break;
+
           case "safety.warn":
           case "safety.crisis":
           case "safety.block":
@@ -163,15 +264,19 @@ export function useSSE({ url }: UseSSEOptions) {
     return () => {
       cleanup();
       cleanupRef.current = null;
-      // Note: do NOT reset lastUrlRef here — StrictMode dev calls
-      // cleanup-then-remount with the same url; keeping lastUrlRef
-      // prevents the remount from opening a second EventSource.
     };
   }, [url, setEmotion, setSSEStatus, setCrisis, setAck, setIntent, setRecall, setGate,
-      startGeneration, setSkeleton, addDetail, addCopyChunk, completeGeneration, setError]);
+      startGeneration, setSkeleton, addDetail, addCopyChunk, completeGeneration, setError,
+      // P0.1
+      setRefineStart, setRefineResult, clearRefining,
+      // P0.2
+      setSessionStatus, setResumeInfo,
+      // P0.3
+      pushNotification, setSystemError,
+      // P2.4
+      setChatError]);
 
   // Auto-close SSE connection when generation completes or errors
-  // Prevents reconnect loop caused by server closing the one-shot stream
   const phase = useGenerationStore((s) => s.phase);
   useEffect(() => {
     if ((phase === "complete" || phase === "error") && cleanupRef.current) {

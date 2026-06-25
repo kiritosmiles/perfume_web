@@ -1,4 +1,4 @@
-import { create } from "zustand";
+﻿import { create } from "zustand";
 import type { RecommendationSkeleton } from "@perfume/shared";
 
 // Re-export shared type for consumers
@@ -19,12 +19,22 @@ type GenerationPhase =
   | "complete"
   | "error";
 
+/** P0.1: Refinement tracking state — set by refine.start events */
+export type RefineAttemptNumber = 1 | 2 | 3;
+export type RefineMethod = "rule" | "semantic_gate" | "deep_upgrade";
+
 interface GenerationState {
   generationId: string | null;
   phase: GenerationPhase;
   mode: "fast" | "deep" | null;
   cards: FragranceCardUI[];
   error: { code: string; user_message: string; degraded: boolean } | null;
+  /** P0.1: Current refinement attempt (1-based, undefined when not refining) */
+  refineAttempt: RefineAttemptNumber | null;
+  /** P0.1: Method used for current/current refinement */
+  refineMethod: RefineMethod | null;
+  /** P0.1: True while a refine.* SSE round is in progress */
+  isRefining: boolean;
 
   startGeneration: (id: string, mode: "fast" | "deep") => void;
   setSkeleton: (recs: RecommendationSkeleton[]) => void;
@@ -33,6 +43,12 @@ interface GenerationState {
   completeGeneration: () => void;
   setError: (code: string, user_message: string, degraded: boolean) => void;
   reset: () => void;
+  /** P0.1: Called by useSSE on refine.start */
+  setRefineStart: (attempt: RefineAttemptNumber, method: RefineMethod) => void;
+  /** P0.1: Called by useSSE on refine.result */
+  setRefineResult: (adjustments: unknown[], updatedCards: unknown[]) => void;
+  /** P0.1: Called by useSSE on refine.gate or refine.fallback */
+  clearRefining: () => void;
 }
 
 const initialState = {
@@ -41,6 +57,9 @@ const initialState = {
   mode: null,
   cards: [],
   error: null,
+  refineAttempt: null,
+  refineMethod: null,
+  isRefining: false,
 };
 
 export const useGenerationStore = create<GenerationState>((set) => ({
@@ -53,6 +72,9 @@ export const useGenerationStore = create<GenerationState>((set) => ({
       mode,
       cards: [],
       error: null,
+      refineAttempt: null,
+      refineMethod: null,
+      isRefining: false,
     }),
 
   setSkeleton: (recs) =>
@@ -93,13 +115,27 @@ export const useGenerationStore = create<GenerationState>((set) => ({
     })),
 
   completeGeneration: () =>
-    set({ phase: "complete" }),
+    set({ phase: "complete", isRefining: false }),
 
   setError: (code, user_message, degraded) =>
     set({
       phase: "error",
       error: { code, user_message, degraded },
+      isRefining: false,
     }),
+
+  setRefineStart: (attempt, method) =>
+    set({ refineAttempt: attempt, refineMethod: method, isRefining: true }),
+
+  setRefineResult: (_adjustments, _updatedCards) =>
+    set((state) => ({
+      // Store the attempt metadata; actual card updates depend on refine.result event payload
+      phase: "complete",
+      isRefining: false,
+    })),
+
+  clearRefining: () =>
+    set({ isRefining: false }),
 
   reset: () => set(initialState),
 }));

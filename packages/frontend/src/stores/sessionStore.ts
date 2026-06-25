@@ -1,4 +1,4 @@
-import { create } from "zustand";
+﻿import { create } from "zustand";
 
 interface EmotionState {
   emotion_vector: Record<string, number> | null;
@@ -10,6 +10,21 @@ interface EmotionState {
 
 export type SessionIntent = "self_use" | "gift" | "explore";
 export type SessionMode = "context" | "identity" | "novelty";
+
+/** P0.2: Resume info from lifecycle.resume SSE event */
+interface ResumeInfo {
+  generation_id: string;
+  from_phase: string;
+  already_streamed_count: number;
+}
+
+/** P0.3: System notification entry from system.notification SSE event */
+interface SystemNotification {
+  kind: "perfumer_update" | "mood_journal_ready";
+  message: string;
+  action_link: string | null;
+  ts: string;
+}
 
 interface SessionState {
   sessionId: string | null;
@@ -32,6 +47,23 @@ interface SessionState {
     bypassed: boolean;
   } | null;
 
+  // --- P0.2: Lifecycle ---
+  /** Active / idle_timeout / completed, set by lifecycle.session SSE event */
+  sessionStatus: "active" | "idle_timeout" | "completed" | null;
+  /** Resume info when reconnecting to an in-progress generation */
+  resumeInfo: ResumeInfo | null;
+
+  // --- P0.3: System notifications ---
+  /** Queue of unread system notifications */
+  notifications: SystemNotification[];
+  /** Current system-level error (cleared on next event or user dismiss) */
+  systemError: { code: string; user_message: string; retryable: boolean } | null;
+  /** Dismiss system error */
+  dismissSystemError: () => void;
+
+  // --- P2.4: Chat-level error ---
+  chatError: { code: string; user_message: string; retryable: boolean } | null;
+
   setEmotion: (emotion: {
     emotion_vector: Record<string, number>;
     primary_emotion: string;
@@ -46,6 +78,11 @@ interface SessionState {
   setIntent: (intent: SessionIntent) => void;
   setSessionMode: (mode: SessionMode) => void;
   setGate: (gate: SessionState["gate"]) => void;
+  setSessionStatus: (status: "active" | "idle_timeout" | "completed") => void;
+  setResumeInfo: (info: ResumeInfo | null) => void;
+  pushNotification: (n: SystemNotification) => void;
+  setSystemError: (e: { code: string; user_message: string; retryable: boolean } | null) => void;
+  setChatError: (e: { code: string; user_message: string; retryable: boolean } | null) => void;
   reset: () => void;
 }
 
@@ -59,6 +96,11 @@ const initialState = {
   intent: "self_use" as SessionIntent,
   sessionMode: "context" as SessionMode,
   gate: null,
+  sessionStatus: null,
+  resumeInfo: null,
+  notifications: [] as SystemNotification[],
+  systemError: null,
+  chatError: null,
 };
 
 export const useSessionStore = create<SessionState>((set) => ({
@@ -88,6 +130,24 @@ export const useSessionStore = create<SessionState>((set) => ({
   setSessionMode: (sessionMode) => set({ sessionMode }),
 
   setGate: (gate) => set({ gate }),
+
+  // P0.2
+  setSessionStatus: (sessionStatus) => set({ sessionStatus }),
+
+  setResumeInfo: (resumeInfo) => set({ resumeInfo }),
+
+  // P0.3
+  pushNotification: (n) =>
+    set((state) => ({
+      notifications: [...state.notifications, n].slice(-10), // keep last 10
+    })),
+
+  setSystemError: (systemError) => set({ systemError }),
+
+  dismissSystemError: () => set({ systemError: null }),
+
+  // P2.4
+  setChatError: (chatError) => set({ chatError }),
 
   reset: () => set(initialState),
 }));

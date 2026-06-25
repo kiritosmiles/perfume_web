@@ -1,4 +1,4 @@
-const BASE_URL = "/api/v1";
+﻿const BASE_URL = "/api/v1";
 
 export class ApiClientError extends Error {
   code: string;
@@ -164,7 +164,7 @@ export interface MemoryTimelineResponse {
   total: number;
 }
 
-// ── Feedback ──────────────────────────────────────────────────────────────────
+// 鈹€鈹€ Feedback 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 export interface ExplicitFeedbackInput {
   generation_id: string;
@@ -210,7 +210,7 @@ export async function submitImplicitFeedback(
   });
 }
 
-// ── Profile ────────────────────────────────────────────────────────────────────
+// 鈹€鈹€ Profile 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 export interface ProfileResponse {
   user_id: string;
@@ -257,7 +257,7 @@ export async function submitOnboarding(
   return resp.json();
 }
 
-// ── Journal ────────────────────────────────────────────────────────────────────
+// 鈹€鈹€ Journal 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 export interface EmotionTrendPoint {
   date: string;
@@ -318,6 +318,60 @@ export async function getWeeklyJournal(weekStart?: string): Promise<WeeklyJourna
   return resp.json();
 }
 
+
+// P2.3: Handoff to human perfumer
+export interface HandoffResponse {
+  status: string;
+  message: string;
+  ticket_id?: string;
+}
+
+export async function submitHandoff(input: {
+  generation_id?: string | null;
+  reason?: string;
+  email?: string;
+}): Promise<HandoffResponse> {
+  const token = localStorage.getItem("access_token");
+  const browserId = getBrowserId();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  else headers["X-Browser-Id"] = browserId;
+  const resp = await fetch(`${BASE_URL}/recommend/handoff`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(input),
+  });
+  if (!resp.ok) {
+    throw new ApiClientError("HANDOFF_ERROR", `Handoff failed: ${resp.status}`, true);
+  }
+  return resp.json();
+}
+
+// P2.2: Perfumer queue status
+export interface PerfumerQueueItem {
+  id: string;
+  status: "pending" | "accepted" | "completed" | "cancelled";
+  perfume_name: string;
+  notes: string;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface PerfumerQueueResponse {
+  items: PerfumerQueueItem[];
+}
+
+export async function getPerfumerQueue(): Promise<PerfumerQueueResponse> {
+  const token = localStorage.getItem("access_token");
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const resp = await fetch(`${BASE_URL}/perfumer/queue`, { headers });
+  if (!resp.ok) {
+    throw new ApiClientError("QUEUE_ERROR", `Failed to fetch queue: ${resp.status}`, false);
+  }
+  return resp.json();
+}
+
 export async function getMemoryTimeline(
   limit = 20,
   offset = 0,
@@ -340,3 +394,4 @@ export async function getMemoryTimeline(
   }
   return resp.json();
 }
+
