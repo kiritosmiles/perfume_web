@@ -358,6 +358,44 @@ async def get_cached_skeleton(key: str) -> list[dict] | None:
         return None
 
 
+# ── Generation concurrency lock (Phase 4: multi-tab concurrency) ──────────────
+
+CONCURRENCY_LOCK_TTL = 30  # seconds — auto-release if generation crashes
+
+
+async def acquire_generation_lock(owner_key: str, lock_id: str) -> bool:
+    """Try to acquire a per-user generation lock. Uses Redis SET NX for atomicity.
+
+    owner_key = user_id (auth) or browser_id (guest) or session_id (fallback).
+    Returns True if lock acquired, False if another tab/request holds it.
+
+    Redis down → allow (optimistic — don't block user).
+    """
+    r = _get_client()
+    if r is None:
+        return True  # Redis down → optimistic
+    try:
+        key = f"gen_lock:{owner_key}"
+        acquired = await r.set(key, lock_id, nx=True, ex=CONCURRENCY_LOCK_TTL)
+        return bool(acquired)
+    except Exception:
+        return True  # Error → optimistic
+
+
+async def release_generation_lock(owner_key: str, lock_id: str) -> None:
+    """Release a per-user generation lock. Only deletes if we still hold it."""
+    r = _get_client()
+    if r is None:
+        return
+    try:
+        key = f"gen_lock:{owner_key}"
+        current = await r.get(key)
+        if current == lock_id:
+            await r.delete(key)
+    except Exception:
+        pass
+
+
 # ── Health check ──────────────────────────────────────────────────────────────
 
 async def check_redis_health() -> bool:

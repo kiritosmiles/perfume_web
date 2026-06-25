@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { EmotionCardPicker } from "../emotion/EmotionCardPicker";
@@ -10,6 +10,7 @@ import type { SessionMode } from "../chat/SessionModeSelector";
 import { ChatBody } from "../chat/ChatBody";
 import { ChatInput } from "../chat/ChatInput";
 import { ThinkingIndicator } from "../chat/ThinkingIndicator";
+import { KnowledgeCardOverlay } from "../chat/KnowledgeCardOverlay";
 import { FragranceCard } from "../fragrance/FragranceCard";
 import { Button } from "../ui/Button";
 import { NetworkStatusBar } from "../ui/NetworkStatusBar";
@@ -214,6 +215,20 @@ export function RecommendationFlow({
     generationPhase !== "complete" &&
     generationPhase !== "error";
   const hasStarted = sseUrl !== null;
+
+  // ── FR-5.5: Time-gated loading states ──
+  const [loadingElapsed, setLoadingElapsed] = useState(0);
+  useEffect(() => {
+    if (!isGenerating) {
+      setLoadingElapsed(0);
+      return;
+    }
+    setLoadingElapsed(0);
+    const timer = setInterval(() => {
+      setLoadingElapsed((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isGenerating]);
 
   const statusDot = {
     idle: "bg-stone-300",
@@ -459,6 +474,9 @@ export function RecommendationFlow({
             <ThinkingIndicator text="Analyzing your emotions..." />
           </div>
         )}
+
+        {/* FR-5.5: Knowledge card carousel for >3s waits */}
+        <KnowledgeCardOverlay visible={isGenerating && cards.length === 0 && loadingElapsed >= 3} />
 
         <div className="w-full px-4">
           {/* Horizontal scroll container for cards */}

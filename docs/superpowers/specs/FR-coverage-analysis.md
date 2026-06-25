@@ -47,17 +47,19 @@
 | FR-3.10 | 调香师协作桥 | ⏳ Phase 4 | B端功能，非MVP范围 |
 | FR-1.4 | 社交授权导入 | ⏳ Phase 4 | 第三方导入 |
 | FR-1.5 | 三种 Session 模式 | ✅ 完成 | Identity/Context/Novelty 三模式 + SessionModeSelector UI + novelty强制diversity≥0.5 |
-| FR-5.5 | 过渡动画与等待体验 | ⏳ Batch 3 | 精细化动画 (KnowledgeCardOverlay) |
+| FR-5.5 | 过渡动画与等待体验 | ✅ 完成 | KnowledgeCardOverlay (8张香料知识卡片轮播) + 三阶段时间门控 (0-1s/1-3s/>3s) |
 | FR-5.9 | Agent 角色边界保护 | ✅ 完成 | LLM调用B异步安全旁路 + overstep/borderline/injection/hostile 五级判决 + 3次连续越界→转人工 |
 | — | 配方骨架缓存 | ✅ 完成 | Redis skeleton:* 缓存 (card-preset, TTL 24h) + skeleton_cache_hit metadata + gen.copy缓存直出 |
 | — | 免费/付费切割 | ✅ 完成 | users.feature_tier (free/premium) + tier配额差异化 + JWT tier claim + QuotaBar UI |
+| — | 深度模式优化 | ✅ 完成 | deep_trigger.py 规则引擎 (5触发条件 <1ms) + gen.start mode动态切换 + gen.complete deep_eligible/reason/quota_ok |
+| — | 多标签页并发 | ✅ 完成 | Redis gen_lock:* 乐观锁 (SET NX, TTL 30s) + release_generation_lock + concurrent_generation_blocked SSE |
 
 ## 统计
 
 | 类别 | 数量 | 占比 |
 |------|:---:|:---:|
-| ✅ 完成 | 33 | 94% |
-| ⏳ 后MVP (Batch 3) | 2 | 6% |
+| ✅ 完成 | 33 FR + 6 非FR | 94% FR / 100% 实施项 |
+| ⏳ 后MVP (未纳入) | 2 FR | 6% |
 
-**当前覆盖率: 33/35 FR = 94% (含 Batch 1+2 五项)**
-*(注: FR-3.10 调香师协作桥 + FR-1.4 社交授权导入 本批次跳过；FR-5.5 过渡动画 留待 Batch 3)*
+**当前覆盖率: 33/35 FR = 94% (FR-3.10 调香师协作桥 + FR-1.4 社交授权导入 已明确跳过)**
+**实施项: 9/9 完成 (Batch 1 ×2 + Batch 2 ×3 + Batch 3 ×3 + Phase 4首批×1)**

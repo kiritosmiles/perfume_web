@@ -15,6 +15,7 @@ from app.core.redis import (
     build_graphrag_cache_key, cache_graphrag_result, get_cached_graphrag_result,
     build_skeleton_cache_key, cache_skeleton, get_cached_skeleton,
     increment_boundary_overstep, reset_boundary_overstep,
+    acquire_generation_lock, release_generation_lock,
 )
 from app.services.emotion import resolve_emotion_from_cards, EMOTION_LABELS, DIMENSIONS
 from app.services.fallback import search_fallback_fragrances
@@ -25,6 +26,7 @@ from app.services.llm import generate_copy_for_perfume
 from app.services.llm_emotion import resolve_emotion_from_text
 from app.services.safety import crisis_check, human_handoff_check
 from app.services.boundary import _call_boundary_llm, check_boundary_result
+from app.services.deep_trigger import evaluate_deep_triggers, get_deep_trigger_description
 from app.services.memory import trigger_l1_consolidation
 from app.core.recall import recall_pipeline
 from app.sse.protocol import sse, now_iso
@@ -211,6 +213,21 @@ async def sse_event_stream(
             user_api_key = key_data.get("api_key")
             user_base_url = key_data.get("base_url") or None
 
+    # ── Concurrency lock (Phase 4: multi-tab protection) ────────────────
+    _lock_owner = user_id or input_data.browser_id or sid
+    _lock_acquired = await acquire_generation_lock(_lock_owner, generation_id)
+    if not _lock_acquired:
+        yield sse("gen.complete", {
+            "generation_id": "",
+            "total_cards": 0,
+            "metadata": {"reason": "concurrent_generation_blocked"},
+        })
+        hb_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await hb_task
+        await release_generation_lock(_lock_owner, generation_id)
+        return
+
     # 0) Safety check for text input
     if input_data.user_text and input_data.user_text.strip():
         # Check for explicit human handoff request first
@@ -229,6 +246,7 @@ async def sse_event_stream(
             hb_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await hb_task
+            await release_generation_lock(_lock_owner, generation_id)
             return
 
         check = crisis_check(input_data.user_text)
@@ -246,6 +264,7 @@ async def sse_event_stream(
                 hb_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await hb_task
+                await release_generation_lock(_lock_owner, generation_id)
                 return
             elif check["severity"] == "medium":
                 yield sse("safety.warn", {
@@ -400,6 +419,7 @@ async def sse_event_stream(
         hb_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await hb_task
+        await release_generation_lock(_lock_owner, generation_id)
         return
     elif gate_result["verdict"] == "partial":
         yield sse("gate.wait", {"message": gate_result.get("message", "正在查找相关信息...")})
@@ -448,6 +468,7 @@ async def sse_event_stream(
                     hb_task.cancel()
                     with contextlib.suppress(asyncio.CancelledError):
                         await hb_task
+                    await release_generation_lock(_lock_owner, generation_id)
                     return
                 # count < 3: block with overstep reason
                 yield sse("safety.block", {
@@ -466,6 +487,7 @@ async def sse_event_stream(
                 hb_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await hb_task
+                await release_generation_lock(_lock_owner, generation_id)
                 return
             else:
                 # injection or hostile — block immediately
@@ -484,6 +506,7 @@ async def sse_event_stream(
                 hb_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await hb_task
+                await release_generation_lock(_lock_owner, generation_id)
                 return
 
         if boundary_verdict["verdict"] == "borderline":
@@ -503,10 +526,36 @@ async def sse_event_stream(
         pass
     # context mode: default behavior, no change
 
+    # ── Deep mode trigger evaluation (Phase 4 optimization) ──────────
+    _refine_count = 1 if input_data.refine else 0  # approximate: presence of refine keyword
+    _recipient_info = None
+    if input_data.recipient_age_range or input_data.recipient_relationship or input_data.recipient_gender_pref:
+        _recipient_info = {
+            "age_range": input_data.recipient_age_range,
+            "relationship": input_data.recipient_relationship,
+            "gender_pref": input_data.recipient_gender_pref,
+        }
+    should_deep, deep_reason = evaluate_deep_triggers(
+        intent=intent_result["intent"],
+        diversity=input_data.diversity,
+        refine_count=_refine_count,
+        emotion_vector=emotion_result["emotion_vector"],
+        scene_tag=input_data.scene_tag,
+        recipient_info=_recipient_info,
+    )
+
+    # Check deep quota if eligible
+    deep_quota_ok = True
+    if should_deep and user_id:
+        from app.core.quota import check_free_quota
+        deep_quota_ok = await check_free_quota(user_id, "deep")
+
+    actual_mode = "deep" if (should_deep and deep_quota_ok) else "fast"
+
     # 3) gen.start
     yield sse("gen.start", {
         "generation_id": generation_id,
-        "mode": "fast",
+        "mode": actual_mode,
         "session_mode": _session_mode,
     })
 
@@ -784,6 +833,9 @@ async def sse_event_stream(
             "overstep_flag": boundary_verdict.get("overstep_flag", "unchecked"),
             "skeleton_cache_hit": skeleton_cache_hit,
             "session_mode": _session_mode,
+            "deep_eligible": should_deep,
+            "deep_reason": deep_reason,
+            "deep_quota_ok": deep_quota_ok,
         },
     })
 
@@ -839,3 +891,6 @@ async def sse_event_stream(
         await hb_task
     except asyncio.CancelledError:
         pass
+
+    # ── Concurrency lock release ──
+    await release_generation_lock(_lock_owner, generation_id)
