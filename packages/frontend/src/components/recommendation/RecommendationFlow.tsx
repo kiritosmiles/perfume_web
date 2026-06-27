@@ -455,8 +455,8 @@ export function RecommendationFlow({
               onClick={() => setChatError(null)}
               className="text-xs text-stone-400 ml-2"
             >
-              鉁?
-            </Button>
+              ✕
+            </button>
           </motion.div>
         )}
         {/* P2.3: Human support banner — shown after 3 refinement attempts */}
